@@ -1,0 +1,11 @@
+{
+  "ts": 0,
+  "connected": false,
+  "account": null,
+  "positions": [],
+  "pnl_today_pct": 0,
+  "kill_switch": false,
+  "config_version": null,
+  "config_enabled": false,
+  "last_error": null
+}

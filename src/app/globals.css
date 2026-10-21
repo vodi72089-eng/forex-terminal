@@ -1,0 +1,61 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #111721;
+  --panel2: #161e2b;
+  --line: #232d3f;
+  --text: #e6edf3;
+  --muted: #8b98a9;
+  --accent: #2dd4a7;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+
+h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.3px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 10px; }
+
+.statusbar {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 16px; margin: 16px 0;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: var(--accent); }
+.dot.ko { background: var(--danger); }
+.muted { color: var(--muted); font-size: 13px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 16px;
+}
+.card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.card .value { font-size: 24px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.card .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+
+button {
+  background: var(--accent); color: #04110c; border: 0; border-radius: 8px;
+  padding: 10px 16px; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+button.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+button.danger { background: var(--danger); color: #1a0505; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.err { color: var(--danger); font-size: 13px; margin-top: 8px; }
+section { margin-top: 22px; }

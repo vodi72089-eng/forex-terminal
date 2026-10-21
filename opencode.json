@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/grok-code",
+  "mcp": {
+    "wafle-scraper": {
+      "type": "local",
+      "command": ["wafle-scraper"],
+      "enabled": true,
+      "environment": {}
+    }
+  },
+  "agent": {
+    "market-analyst": {
+      "description": "Analyse le marche Forex et propose des parametres de bot en JSON strict. Ne trade jamais.",
+      "mode": "primary",
+      "prompt": "{file:./AGENTS.md}",
+      "tools": { "write": false, "edit": false, "bash": false }
+    }
+  },
+  "permission": {
+    "edit": { "**": "deny" },
+    "bash": { "**": "deny" },
+    "skill": { "*": "allow" }
+  }
+}

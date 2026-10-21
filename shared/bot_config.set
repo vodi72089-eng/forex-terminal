@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "enabled": false,
+  "symbols": ["EURUSD"],
+  "strategy": { "name": "ema_cross", "fast": 9, "slow": 21, "timeframe": "M5" },
+  "risk": {
+    "max_lot": 0.05,
+    "max_open_trades": 2,
+    "max_daily_loss_pct": 2.0,
+    "sl_pips": 20,
+    "tp_pips": 40
+  },
+  "issued_by": "init",
+  "issued_at": "2026-10-21T00:00:00Z"
+}

@@ -1,0 +1,5 @@
+mt5forge
+MetaTrader5
+fastapi
+uvicorn[standard]
+pydantic

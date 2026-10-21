@@ -1,0 +1,15 @@
+{
+  "identifier": "default",
+  "description": "Permissions forex-terminal : spawn sidecars opencode + python",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "opencode", "cmd": "opencode", "args": true, "sidecar": false },
+        { "name": "python", "cmd": "python", "args": true, "sidecar": false }
+      ]
+    }
+  ]
+}

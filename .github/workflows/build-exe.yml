@@ -1,0 +1,59 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend (export statique)
+        run: npm run build
+
+      - name: Build Tauri (EXE + installeur NSIS)
+        run: npx tauri build
+
+      - name: Upload artifact (EXE + installeur)
+        uses: actions/upload-artifact@v4
+        with:
+          name: forex-terminal-exe
+          path: |
+            src-tauri/target/release/forex-terminal.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Publish release (telechargeable sans compte)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Forex Terminal — build #${{ github.run_number }}
+          body: |
+            EXE Windows auto-compile par GitHub Actions.
+            - forex-terminal.exe : executable nu
+            - forex-terminal_0.1.0_x64-setup.exe : installeur NSIS
+            L'EXE lance OpenCode (:4096) et le bot MT5 embarque (:8100) au demarrage.
+          files: |
+            src-tauri/target/release/forex-terminal.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
