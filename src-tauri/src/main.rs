@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions, windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
