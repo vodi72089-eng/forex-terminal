@@ -1,4 +1,31 @@
-const BOT = "http://127.0.0.1:8100";
+export const BOT = "http://127.0.0.1:8100";
+
+/** Ports possibles du bot. 8100 est le defaut ; si un processus etranger
+ *  l'occupe, Tauri choisit le suivant et le dashboard le decouvre en
+ *  testant la liste (meme ordre que Tauri). */
+export const BOT_PORTS = [8100, 8101, 8102, 8110, 8180];
+
+let BOT_BASE: string | null = null;
+
+/** Resout la base URL du bot (une seule tentative de decouverte). */
+export async function botBase(): Promise<string> {
+  if (BOT_BASE) return BOT_BASE;
+  for (const p of BOT_PORTS) {
+    const base = `http://127.0.0.1:${p}`;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 1500);
+      const r = await fetch(`${base}/health`, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok) {
+        BOT_BASE = base;
+        return base;
+      }
+    } catch { /* port indisponible -> suivant */ }
+  }
+  BOT_BASE = BOT;
+  return BOT;
+}
 
 // Token du bot. Doit correspondre a `bot_token` dans shared/credentials.json.
 // Surcharge possible a la construction : NEXT_PUBLIC_BOT_TOKEN=... npm run build
@@ -71,28 +98,29 @@ async function j<T>(url: string, init?: RequestInit, timeoutMs = 8000): Promise<
   }
 }
 
-export const getRuntime = () => j<Runtime>(`${BOT}/runtime`);
-export const health = () => j<{ ok: boolean }>(`${BOT}/health`);
-export const getLogs = () => j<LogLine[]>(`${BOT}/logs`);
-export const getConfig = () => j<Record<string, unknown>>(`${BOT}/config`);
+export const getRuntime = async () => j<Runtime>(`${await botBase()}/runtime`);
+export const health = async () => j<{ ok: boolean }>(`${await botBase()}/health`);
+export const getLogs = async () => j<LogLine[]>(`${await botBase()}/logs`);
+export const getConfig = async () => j<Record<string, unknown>>(`${await botBase()}/config`);
 
-export const getSnapshot = (symbols = "EURUSD,GBPUSD,USDJPY,XAUUSD") =>
-  j<Snapshot>(`${BOT}/market/snapshot?symbols=${encodeURIComponent(symbols)}`, undefined, 25000);
+export const getSnapshot = async (symbols = "EURUSD,GBPUSD,USDJPY,XAUUSD") =>
+  j<Snapshot>(`${await botBase()}/market/snapshot?symbols=${encodeURIComponent(symbols)}`, undefined, 25000);
 
-export const getQuote = (symbol: string) =>
-  j<Quote>(`${BOT}/market/quote?symbol=${encodeURIComponent(symbol)}`);
+export const getQuote = async (symbol: string) =>
+  j<Quote>(`${await botBase()}/market/quote?symbol=${encodeURIComponent(symbol)}`);
 
-export const getCalendar = () => j<CalendarEvent[]>(`${BOT}/market/calendar`);
+export const getCalendar = async () => j<CalendarEvent[]>(`${await botBase()}/market/calendar`);
 
-export const getNews = (q = "forex EURUSD", limit = 10) =>
-  j<NewsItem[]>(`${BOT}/market/news?q=${encodeURIComponent(q)}&limit=${limit}`);
+export const getNews = async (q = "forex EURUSD", limit = 10) =>
+  j<NewsItem[]>(`${await botBase()}/market/news?q=${encodeURIComponent(q)}&limit=${limit}`);
 
 /** Pousse le FICHIER ENTIER de config. Le bot valide puis rejette en total. */
 export const pushConfig = async (raw: string) => {
+  const base = await botBase();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const r = await fetch(`${BOT}/config/raw`, {
+    const r = await fetch(`${base}/config/raw`, {
       method: "POST",
       headers: { "Content-Type": "text/plain", "X-Bot-Token": TOKEN },
       body: raw,
@@ -125,10 +153,11 @@ export const setEnabled = async (enabled: boolean) => {
 };
 
 export const closeAll = async () => {
+  const base = await botBase();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const r = await fetch(`${BOT}/close-all`, {
+    const r = await fetch(`${base}/close-all`, {
       method: "POST",
       headers: { "X-Bot-Token": TOKEN },
       signal: ctrl.signal,
@@ -143,11 +172,13 @@ export const closeAll = async () => {
   }
 };
 
-export const sendOrder = (body: {
+export const sendOrder = async (body: {
   symbol: string; side: string; lot: number; sl_pips: number; tp_pips: number;
-}) =>
-  fetch(`${BOT}/order`, {
+}) => {
+  const base = await botBase();
+  return fetch(`${base}/order`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Bot-Token": TOKEN },
     body: JSON.stringify(body),
   });
+};

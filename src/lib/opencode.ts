@@ -1,18 +1,42 @@
-import { getRuntime, pushConfig, type Runtime } from "./bot";
+import { BOT, getRuntime, pushConfig, type Runtime } from "./bot";
 
-const OC = "http://127.0.0.1:4096";
+/** Port du serveur opencode. Il n'est PAS fixe : Tauri choisit un port libre
+ *  (4096 peut etre occupe par un processus etranger) et le publie via le bot
+ *  (GET /opencode/port). On met en cache le resultat. */
+let OC_PORT: number | null = null;
+
+export async function opencodePort(): Promise<number> {
+  if (OC_PORT !== null) return OC_PORT;
+  try {
+    const r = await fetch(`${BOT}/opencode/port`);
+    const j = (await r.json()) as { port?: number };
+    if (j.port) OC_PORT = j.port;
+  } catch { /* le bot n'est pas encore pret -> port par defaut */ }
+  return OC_PORT ?? 4096;
+}
+
+async function ocBase(): Promise<string> {
+  const p = await opencodePort();
+  return `http://127.0.0.1:${p}`;
+}
 
 /** Modele par defaut. Doit exister dans `opencode models`.
  *  Surchargeable : NEXT_PUBLIC_OPENCODE_MODEL=opencode/grok-4.7 */
 export const MODEL = process.env.NEXT_PUBLIC_OPENCODE_MODEL || "opencode/grok-4.7";
 
-export const ocHealth = () =>
-  fetch(`${OC}/global/health`, { signal: AbortSignal.timeout(3000) })
-    .then((r) => r.json())
-    .catch((e) => ({ healthy: false, error: String(e) }));
+export const ocHealth = async () => {
+  const base = await ocBase();
+  try {
+    const r = await fetch(`${base}/global/health`, { signal: AbortSignal.timeout(3000) });
+    return await r.json();
+  } catch (e) {
+    return { healthy: false, error: String(e) };
+  }
+};
 
 export async function createSession(title = "market-analysis") {
-  const r = await fetch(`${OC}/session`, {
+  const base = await ocBase();
+  const r = await fetch(`${base}/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
@@ -34,7 +58,8 @@ export async function prompt(
   text: string,
   model?: { providerID: string; modelID: string },
 ) {
-  const r = await fetch(`${OC}/session/${sessionId}/message`, {
+  const base = await ocBase();
+  const r = await fetch(`${base}/session/${sessionId}/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

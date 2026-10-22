@@ -76,3 +76,47 @@ def runtime_cwd() -> str:
     """Repertoire de travail des sidecars : celui qui contient opencode.json
     ET les ressources (bot/, .opencode/)."""
     return project_root()
+
+
+def oc_port_file() -> str:
+    """Fichier ou Tauri ecrit le portChoisi pour opencode serve.
+
+    Un port fixe (4096) peut etre occupe par un processus etranger (Docker,
+    autre session Windows) qui ne repond pas : le serveur opencode refuse
+    alors de demarrer (ServeError). Le port est donc choisi dynamiquement
+    et transmis au bot via ce fichier, que le bot expose au dashboard.
+    """
+    return os.path.join(shared_dir(), "opencode.port")
+
+
+def _candidate_shared_dirs() -> list:
+    """Dossiers ou le fichier de port peut se trouver :
+    le dossier de l'app installee ET le dossier shared du projet (mode dev)."""
+    out = [shared_dir()]
+    proj = os.path.join(project_root(), "shared")
+    if os.path.abspath(proj) != os.path.abspath(out[0]):
+        out.append(proj)
+    base = os.environ.get("APPDATA")
+    if base:
+        appdata = os.path.join(base, APP_ID, "shared")
+        if os.path.abspath(appdata) != os.path.abspath(out[0]):
+            out.append(appdata)
+    return out
+
+
+def read_port_file(name: str, default: int) -> int:
+    """Lit un fichier de port ecrit par Tauri, ou renvoie la valeur par defaut."""
+    for d in _candidate_shared_dirs():
+        try:
+            with open(os.path.join(d, name), "r", encoding="utf-8") as f:
+                p = int(f.read().strip())
+                if 1024 < p < 65536:
+                    return p
+        except Exception:
+            continue
+    return default
+
+
+def read_oc_port(default: int = 4096) -> int:
+    """Port opencode annonce par Tauri (default si absent/invalide)."""
+    return read_port_file("opencode.port", default)

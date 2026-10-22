@@ -316,6 +316,14 @@ def logs():
     return log_tail(60)
 
 
+@app.get("/opencode/port")
+def opencode_port():
+    """Port reellement utilise par le serveur opencode.
+    Tauri le choisit dynamiquement (un port fixe peut etre occupe par un
+    processus etranger) et l'ecrit dans shared/opencode.port."""
+    return {"port": paths.read_oc_port()}
+
+
 @app.get("/market/snapshot")
 def market_snapshot(symbols: str | None = None, news_limit: int = 8):
     """Marche public (APIs gratuites sans cle) : quotes, taux, calendrier, actus."""
@@ -394,4 +402,8 @@ if __name__ == "__main__":
         pass
     threading.Thread(target=loop, daemon=True).start()
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8100, log_level="warning")
+    # Le port est choisi par Tauri (un port fixe peut etre occupe par un
+    # processus etranger) et ecrit dans shared/bot.port.
+    BOT_PORT = paths.read_port_file("bot.port", 8100)
+    log.info("API bot sur 127.0.0.1:%d", BOT_PORT)
+    uvicorn.run(app, host="127.0.0.1", port=BOT_PORT, log_level="warning")

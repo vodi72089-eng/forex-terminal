@@ -135,6 +135,36 @@ fn spawn_sidecar(logname: &str, prog: &Program, args: &[&str], cwd: &Path) -> Re
     Ok(())
 }
 
+/// Choisit un port libre pour le serveur opencode.
+/// Un port fixe (4096) peut etre occupe par un processus etranger (conteneur
+/// Docker, autre session Windows) qui ne repond pas : opencode refuse alors
+/// de demarrer (ServeError). On essaie donc une liste ordonnee.
+fn pick_port(preferred: u16, candidates: &[u16]) -> u16 {
+    let mut list: Vec<u16> = vec![preferred];
+    for c in candidates {
+        if *c != preferred {
+            list.push(*c);
+        }
+    }
+    for p in list {
+        if std::net::TcpListener::bind(("127.0.0.1", p)).is_ok() {
+            return p;
+        }
+    }
+    preferred
+}
+
+/// Ecrit le port opencode dans le dossier de donnees de l'app (le bot
+/// l'expose au dashboard via /opencode/port).
+fn write_port_file(name: &str, port: u16) {
+    let Some(dir) = log_dir() else { return };
+    let p = dir.join("shared");
+    if std::fs::create_dir_all(&p).is_err() {
+        return;
+    }
+    let _ = std::fs::write(p.join(name), port.to_string());
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -146,13 +176,16 @@ fn main() {
                 std::env::current_dir()?
             };
 
-            // 1. Sidecar OpenCode en mode serveur (port 4096)
+            // 1. Sidecar OpenCode en mode serveur (port choisi dynamiquement)
+            let oc_port = pick_port(4096, &[4097, 4098, 4099, 4100, 4180, 5280]);
+            write_port_file("opencode.port", oc_port);
             match resolve_program("opencode", &[]) {
                 Some(p) => {
+                    let port_s = oc_port.to_string();
                     if let Err(e) = spawn_sidecar(
                         "opencode.log",
                         &p,
-                        &["serve", "--port", "4096"],
+                        &["serve", "--port", &port_s],
                         &cwd,
                     ) {
                         eprintln!("opencode: {}", e);
@@ -171,6 +204,8 @@ fn main() {
             }
 
             // 2. Bot MT5 embarque (module Python du projet)
+            let bot_port = pick_port(8100, &[8101, 8102, 8110, 8180]);
+            write_port_file("bot.port", bot_port);
             match resolve_program("python", &["C:\\Python312", "C:\\Python313"]) {
                 Some(p) => {
                     if let Err(e) = spawn_sidecar("bot.log", &p, &["-u", "bot/main.py"], &cwd) {
