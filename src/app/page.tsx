@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  closeAll, getConfig, getSnapshot, getRuntime, health, setEnabled,
+  BOT, BOT_PORTS, botUnreachable, closeAll, getConfig, getSnapshot, getRuntime,
+  health, setEnabled,
   type CalendarEvent, type LogLine, type NewsItem, type Quote, type Runtime,
 } from "@/lib/bot";
-import { analyzeAndPropose, ocHealth } from "@/lib/opencode";
+import { analyzeAndPropose, ocHealth, opencodePortLabel } from "@/lib/opencode";
 
 const fmt = (n: number | null | undefined, d = 2) =>
   n === null || n === undefined || Number.isNaN(n) ? "—" : n.toFixed(d);
@@ -125,8 +126,12 @@ export default function Page() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h1>Forex Terminal</h1>
         <div className="row muted">
-          <span><span className={`dot ${botOk ? "ok" : "ko"}`} /> Bot MT5 :8100</span>
-          <span><span className={`dot ${ocOk ? "ok" : "ko"}`} /> OpenCode :4096</span>
+          <span title={`ports testes : ${BOT_PORTS.join(", ")}`}>
+            <span className={`dot ${botOk ? "ok" : "ko"}`} /> Bot MT5
+          </span>
+          <span>
+            <span className={`dot ${ocOk ? "ok" : "ko"}`} /> OpenCode
+          </span>
         </div>
       </div>
 
@@ -151,6 +156,15 @@ export default function Page() {
       {rt?.last_error && (
         <div className="err" style={{ marginTop: 0, marginBottom: 12 }}>
           <b>Config rejetee :</b> {rt.last_error}
+        </div>
+      )}
+
+      {!botOk && (
+        <div className="warnbox">
+          <b>Le bot ne repond pas.</b>{" "}
+          {botUnreachable()
+            ? `Aucun bot trouve sur les ports ${BOT_PORTS.join(", ")}. Verifie les logs : %APPDATA%\\com.forex.terminal\\bot.log.err`
+            : `Tentative sur ${BOT} (${BOT_PORTS.join(", ")}). Le bot met quelques secondes a demarrer.`}
         </div>
       )}
 
@@ -188,6 +202,10 @@ export default function Page() {
           <button className="secondary" onClick={() => { refresh(); refreshMarket(); }}>Rafraichir</button>
         </div>
         {err && <div className="err">{err}</div>}
+        <div className="muted" style={{ marginTop: 8, fontSize: 11 }}>
+          Bot : {BOT} (ports {BOT_PORTS.join(", ")}) · OpenCode : {opencodePortLabel()} ·
+          Logs : %APPDATA%\com.forex.terminal\
+        </div>
       </section>
 
       <section>

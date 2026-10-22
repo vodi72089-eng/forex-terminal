@@ -4,16 +4,23 @@ import { BOT, getRuntime, pushConfig, type Runtime } from "./bot";
  *  (4096 peut etre occupe par un processus etranger) et le publie via le bot
  *  (GET /opencode/port). On met en cache le resultat. */
 let OC_PORT: number | null = null;
+let OC_PORT_SOURCE = "defaut 4096";
 
 export async function opencodePort(): Promise<number> {
   if (OC_PORT !== null) return OC_PORT;
   try {
     const r = await fetch(`${BOT}/opencode/port`);
     const j = (await r.json()) as { port?: number };
-    if (j.port) OC_PORT = j.port;
+    if (j.port) {
+      OC_PORT = j.port;
+      OC_PORT_SOURCE = `choisi par l'app (${j.port})`;
+    }
   } catch { /* le bot n'est pas encore pret -> port par defaut */ }
   return OC_PORT ?? 4096;
 }
+
+/** Libelle du port opencode (pour l'affichage dans le dashboard). */
+export const opencodePortLabel = () => OC_PORT_SOURCE;
 
 async function ocBase(): Promise<string> {
   const p = await opencodePort();

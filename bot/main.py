@@ -25,6 +25,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import Body, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+# uvicorn est importe ICI, pas dans __main__ : l'import de uvicorn monte
+# l'extension httptools (~9 s) et, s'il se fait en concurrence avec le thread
+# MT5 qui tient le GIL, il bloque le demarrage de l'API pendant 9 s.
+import uvicorn  # noqa: E402
 
 import paths
 import market_data
@@ -83,21 +87,18 @@ COOLDOWN_S = 60.0
 
 app = FastAPI(title="forex-terminal-bot", docs_url=None, redoc_url=None)
 
-# ── CORS : le dashboard vit dans un WebView Tauri (origine tauri.localhost) ──
-# Sans ces headers, le navigateur BLOQUE la reponse : le dashboard serait vide.
+# ── CORS : le dashboard vit dans un WebView Tauri (origine tauri.localhost)
+# Sans ces headers, le navigateur BLOQUE la reponse et le dashboard reste
+# vide. Le bot n'ecoute QUE sur 127.0.0.1 : n'importe quel process local
+# peut deja l'atteindre sans navigateur, donc CORS n'est pas une barriere de
+# securite ici — les endpoints mutateurs sont proteges par le token.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-        "tauri://localhost",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_origin_regex=r"^(https?://(tauri\.localhost|localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost)$",
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -218,14 +219,19 @@ def loop():
 
 
 def _connect_loop():
-    """Connexion MT5 persistante (ne bloque pas la boucle principale)."""
+    """Connexion MT5 persistante (ne bloque pas la boucle principale).
+
+    ATTENTION : le sleep est INDISPENSABLE. Sans lui, quand la connexion est
+    etablie, cette boucle tourne en boucle serree et MONOPOLISE le GIL :
+    le thread principal (serveur uvicorn) est affame et l'API met ~9 s a
+    repondre, le CPU est a 100%."""
     while True:
         try:
             if not conn.connected:
                 conn.connect()
         except Exception as e:
             log.exception("connexion : %s", e)
-            time.sleep(5)
+        time.sleep(1)
 
 
 def write_runtime():
@@ -401,7 +407,6 @@ if __name__ == "__main__":
     except Exception:
         pass
     threading.Thread(target=loop, daemon=True).start()
-    import uvicorn
     # Le port est choisi par Tauri (un port fixe peut etre occupe par un
     # processus etranger) et ecrit dans shared/bot.port.
     BOT_PORT = paths.read_port_file("bot.port", 8100)

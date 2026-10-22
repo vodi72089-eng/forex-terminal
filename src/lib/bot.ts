@@ -6,8 +6,11 @@ export const BOT = "http://127.0.0.1:8100";
 export const BOT_PORTS = [8100, 8101, 8102, 8110, 8180];
 
 let BOT_BASE: string | null = null;
+let BOT_DISCOVERY_FAILED = false;
 
-/** Resout la base URL du bot (une seule tentative de decouverte). */
+/** Resout la base URL du bot (une seule tentative de decouverte).
+ *  Si la decouverte echoue (bot pas encore demarre), on NE fige pas le
+ *  resultat : la prochaine appellation reessaie. */
 export async function botBase(): Promise<string> {
   if (BOT_BASE) return BOT_BASE;
   for (const p of BOT_PORTS) {
@@ -19,13 +22,17 @@ export async function botBase(): Promise<string> {
       clearTimeout(t);
       if (r.ok) {
         BOT_BASE = base;
+        BOT_DISCOVERY_FAILED = false;
         return base;
       }
     } catch { /* port indisponible -> suivant */ }
   }
-  BOT_BASE = BOT;
+  BOT_DISCOVERY_FAILED = true;
   return BOT;
 }
+
+/** true si le bot n'a pas encore repondu (diagnostic affiche dans l'UI). */
+export const botUnreachable = () => BOT_DISCOVERY_FAILED;
 
 // Token du bot. Doit correspondre a `bot_token` dans shared/credentials.json.
 // Surcharge possible a la construction : NEXT_PUBLIC_BOT_TOKEN=... npm run build

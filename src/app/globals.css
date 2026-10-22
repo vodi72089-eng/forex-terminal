@@ -58,6 +58,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .err { color: var(--danger); font-size: 13px; margin-top: 8px; }
+.warnbox {
+  background: rgba(251, 191, 36, 0.08); border: 1px solid var(--warn);
+  color: var(--warn); border-radius: 10px; padding: 10px 14px;
+  font-size: 13px; margin-bottom: 12px;
+}
 section { margin-top: 22px; }
 
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
