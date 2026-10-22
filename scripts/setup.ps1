@@ -1,8 +1,8 @@
-# Forex Terminal — installation complete (Windows PowerShell)
+﻿# Forex Terminal ? installation complete (Windows PowerShell)
 # Usage : powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 $ErrorActionPreference = "Continue"
 Set-Location (Split-Path $PSScriptRoot -Parent)
-Write-Host "=== Forex Terminal — SETUP ===" -ForegroundColor Cyan
+Write-Host "=== Forex Terminal ? SETUP ===" -ForegroundColor Cyan
 
 # 1. Controle prerequis
 $need = @()

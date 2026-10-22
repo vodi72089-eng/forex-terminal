@@ -89,6 +89,7 @@ section { margin-top: 22px; }
   padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
 }
 .badge.live { color: var(--accent); border-color: var(--accent); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
 .badge.dead { color: var(--danger); border-color: var(--danger); }
 
 .logline { padding: 3px 0; border-bottom: 1px solid rgba(35, 45, 63, 0.5); }

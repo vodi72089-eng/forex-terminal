@@ -23,6 +23,7 @@ const fmtEventDate = (e: { date?: string; time?: string }) => {
 export default function Page() {
   const [rt, setRt] = useState<Runtime | null>(null);
   const [botOk, setBotOk] = useState(false);
+  const [mt5Ok, setMt5Ok] = useState(false);
   const [ocOk, setOcOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
@@ -44,7 +45,11 @@ export default function Page() {
       ocHealth() as Promise<{ healthy?: boolean }>,
       getRuntime(),
     ]);
-    setBotOk(h.status === "fulfilled" && Boolean(h.value?.ok));
+    // "bot vivant" = le bot repond (HTTP 200). "MT5 connecte" = health().ok.
+    // Ces deux notions sont differentes : sans identifiants MT5, le bot
+    // repond parfaitement mais health().ok vaut false.
+    setBotOk(h.status === "fulfilled");
+    setMt5Ok(h.status === "fulfilled" && Boolean(h.value?.ok));
     setOcOk(o.status === "fulfilled" && Boolean(o.value?.healthy));
     if (r.status === "fulfilled") {
       setRt(r.value);
@@ -152,12 +157,22 @@ export default function Page() {
         )}
         {rt?.kill_switch && <span style={{ color: "var(--danger)", fontWeight: 700 }}>KILL SWITCH</span>}
         {enabled && <span className="badge live">BOT ACTIF</span>}
+        {botOk && !mt5Ok && <span className="badge warn">MT5 NON CONNECTE</span>}
         {stale && <span className="badge dead">BOT ARRETE</span>}
       </div>
 
       {rt?.last_error && (
         <div className="err" style={{ marginTop: 0, marginBottom: 12 }}>
           <b>Config rejetee :</b> {rt.last_error}
+        </div>
+      )}
+
+      {botOk && !mt5Ok && (
+        <div className="warnbox">
+          <b>MT5 non connecte.</b>{" "}
+          Le bot fonctionne, mais MetaTrader 5 n&apos;est pas connecte au compte.
+          Verifie <code>shared\\credentials.json</code> (login / password / server d&apos;un compte{" "}
+          <b>DEMO</b>) et que le terminal MetaTrader 5 est lance et connecte.
         </div>
       )}
 

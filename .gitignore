@@ -10,3 +10,6 @@ __pycache__/
 
 # Fichiers generes par des outils tiers (MCP memory-bank / cline) — hors projet
 .clinerules-*
+
+# Fichiers de port ecrits a l'execution (choisis dynamiquement)
+shared/*.port

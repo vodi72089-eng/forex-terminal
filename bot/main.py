@@ -108,7 +108,30 @@ def _auth(x_bot_token: str):
         raise HTTPException(401, "unauthorized")
 
 
-def apply_config(raw: str):
+def _persist(cfg: dict) -> None:
+    """Ecrit la config appliquee dans shared/bot_config.set.
+
+    Sans cela, une config poussee par le dashboard (Activer/Desactiver) ou
+    par l'IA ne survit PAS au redemarrage du bot : le fichier reste la
+    version d'origine et le bot recharge l'ancienne config au demarrage."""
+    global cfg_mtime
+    payload = dict(cfg)
+    payload["version"] = int(payload.get("version", 1))
+    raw = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    try:
+        with open(CFG_PATH, "r", encoding="utf-8") as f:
+            if f.read() == raw:
+                return  # deja a jour
+    except Exception:
+        pass
+    tmp = CFG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(raw)
+    os.replace(tmp, CFG_PATH)
+    cfg_mtime = os.path.getmtime(CFG_PATH)
+
+
+def apply_config(raw: str, persist: bool = True):
     """Le fichier ENTIER est valide puis applique. Tout defaut => rejet total.
     Renvoie la config effective. Lève une exception en cas de rejet."""
     global cfg, cfg_error
@@ -120,6 +143,12 @@ def apply_config(raw: str):
     log_add("INFO", f"bot_config.set applique : version={cfg['version']} "
                      f"enabled={cfg['enabled']} strategy={cfg['strategy'].get('name')} "
                      f"risk={ {k: round(float(v), 4) for k, v in cfg['risk'].items()} }", "config")
+    if persist:
+        try:
+            _persist(cfg)
+        except Exception as e:
+            log_add("WARN", f"config non persistee : {e}", "config")
+            log.warning("config non persistee : %s", e)
     return cfg
 
 

@@ -1,4 +1,4 @@
-# Push du kit vers GitHub -> les Actions GitHub compilent l'EXE automatiquement
+﻿# Push du kit vers GitHub -> les Actions GitHub compilent l'EXE automatiquement
 # Usage :
 #   powershell -ExecutionPolicy Bypass -File scripts\push-github.ps1 -Token ghp_xxx -RepoUrl https://github.com/TON_USER/forex-terminal.git
 param(
