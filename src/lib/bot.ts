@@ -93,11 +93,18 @@ async function j<T>(url: string, init?: RequestInit, timeoutMs = 8000): Promise<
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(url, { ...init, signal: init?.signal ?? ctrl.signal });
-    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+    if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
     return (await r.json()) as T;
   } catch (e) {
-    if ((e as Error).name === "AbortError") {
-      throw new Error(`${url} -> timeout (${timeoutMs}ms)`);
+    const err = e as Error;
+    if (err.name === "AbortError") {
+      throw new Error(`Le bot ne repond pas (${url} : timeout ${timeoutMs} ms)`);
+    }
+    if (err instanceof TypeError || /Failed to fetch|NetworkError|load failed/i.test(err.message)) {
+      throw new Error(
+        `Bot injoignable sur ${url} : le process du bot est arreté ou le port est bloque. ` +
+        `Verifie %APPDATA%\\com.forex.terminal\\bot.log.err`,
+      );
     }
     throw e;
   } finally {

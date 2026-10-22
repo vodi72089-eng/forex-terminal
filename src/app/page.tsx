@@ -120,6 +120,7 @@ export default function Page() {
   const strategy = rt?.strategy as { name?: string; fast?: number; slow?: number; timeframe?: string } | null;
   const enabled = rt?.config_enabled ?? false;
   const botLogs: LogLine[] = rt?.log ?? [];
+  const stale = rt !== null && !botOk;
 
   return (
     <main className="wrap">
@@ -151,6 +152,7 @@ export default function Page() {
         )}
         {rt?.kill_switch && <span style={{ color: "var(--danger)", fontWeight: 700 }}>KILL SWITCH</span>}
         {enabled && <span className="badge live">BOT ACTIF</span>}
+        {stale && <span className="badge dead">BOT ARRETE</span>}
       </div>
 
       {rt?.last_error && (
@@ -161,10 +163,11 @@ export default function Page() {
 
       {!botOk && (
         <div className="warnbox">
-          <b>Le bot ne repond pas.</b>{" "}
+          <b>{stale ? "Bot arrete — donnees figees." : "Le bot ne repond pas."}</b>{" "}
           {botUnreachable()
             ? `Aucun bot trouve sur les ports ${BOT_PORTS.join(", ")}. Verifie les logs : %APPDATA%\\com.forex.terminal\\bot.log.err`
             : `Tentative sur ${BOT} (${BOT_PORTS.join(", ")}). Le bot met quelques secondes a demarrer.`}
+          {" "}Relance l'application (ou le bot : <code>python -u bot\\main.py</code>).
         </div>
       )}
 
