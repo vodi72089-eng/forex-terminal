@@ -18,3 +18,4 @@ shared/*.port
 # (le seed est shared/bot_config.set.default)
 shared/bot_config.set
 shared/bot_runtime.json
+shared/credentials.json

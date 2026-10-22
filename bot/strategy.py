@@ -2,46 +2,41 @@
 Forex Terminal — moteur de strategies.
 
 CONTRAIT : ce module ne touche JAMAIS a MetaTrader5 et n'ouvre aucun ordre.
-Il transforme des donnees de marche (barres) + une config en une DECISION.
+Il transforme des barres de marche + une config en une DECISION.
 Le bot (main.py) est seul autorise a executer cette decision.
 
-Strategies disponibles :
-  ema_cross       croisement EMA rapide / EMA lente
-  rsi_reversion   retour a la moyenne sur extremite RSI
-  breakout        cassure du plus haut / plus bas des N dernieres barres
+REGISTRE DYNAMIQUE
+Les strategies sont des modules Python dans bot/strategies/*.py (incluses) et
+dans %APPDATA%\\com.forex.terminal\\strategies\\*.py (les tiennes). Chaque
+module expose :
+    NAME        : identifiant unique
+    DESCRIPTION : texte affiche dans le dashboard
+    PARAMS      : {nom: {type, min, max, default, label}}
+    evaluate(bars, params) -> {"action": "buy"|"sell"|"none", "reason": str, ...}
 
-Chaque signal est calcule sur des BARRES CLOSES uniquement (index 0 exclu :
-dans mt5.copy_rates_from_pos la barre 0 est la barre en cours de formation).
+Pour ajouter une strategie : depose ton .py dans le dossier strategies, il
+apparait automatiquement dans l'interface (redemarre le bot).
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
-from datetime import datetime, timezone
+import os
+import sys
 
 log = logging.getLogger("bot.strategy")
 
-# ── Timeframes supportes (minutes) ─────────────────────────────────────────
-TIMEFRAMES = {
-    "M1": 1, "M5": 5, "M15": 15, "M30": 30,
-    "H1": 60, "H4": 240, "D1": 1440,
-}
-
-STRATEGY_NAMES = ("ema_cross", "rsi_reversion", "breakout")
-
-
-# ── Indicateurs ─────────────────────────────────────────────────────────────
+# ── Indicateurs (partages) ─────────────────────────────────────────────────
 def ema(values: list[float], period: int) -> list[float]:
     """EMA standard, amorcage par SMA sur les `period` premieres valeurs."""
     if not values:
         return []
     k = 2.0 / (period + 1.0)
-    out: list[float] = []
     seed = values[:period]
     if len(seed) < period:
-        # historique insuffisant : on degrade en SMA des valeurs disponibles
         return [sum(values[: i + 1]) / (i + 1) for i in range(len(values))]
     prev = sum(seed) / period
-    out.append(prev)
+    out = [prev]
     for v in values[period:]:
         prev = v * k + prev * (1 - k)
         out.append(prev)
@@ -67,130 +62,81 @@ def rsi(values: list[float], period: int = 14) -> list[float]:
     return out
 
 
-# ── Signaux ─────────────────────────────────────────────────────────────────
-def _signal(action: str, reason: str, **extra) -> dict:
-    s = {"action": action, "reason": reason}
-    s.update(extra)
-    return s
+# ── Registre ───────────────────────────────────────────────────────────────
+_BUILTIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategies")
+_MODULES: dict[str, object] = {}
 
 
-def ema_cross(closes: list[float], fast: int, slow: int,
-              allow_reentry: bool = True) -> dict:
-    """Tendance EMA fast/slow.
-
-    Le signal est un ETAT, pas un evenement ponctuel : si EMA_fast > EMA_slow,
-    l'etat est « buy ». Un simple croisement ne se produit qu'UNE fois par
-    tendance : avec une logique d'evenement pur, le bot_STOPPERAIT de trader
-    apres son premier trade dans une tendance (plus de croisement a venir).
-    L'etat permet la RE-ENTREE apres un SL/TP (le bot refuse juste d'empiler
-    une position si le symbole est deja ouvert).
-    """
-    if len(closes) < slow + 3:
-        return _signal("none", f"historique insuffisant ({len(closes)} barres, {slow}+3 requis)")
-    ef = ema(closes, fast)
-    es = ema(closes, slow)
-    if len(ef) < 2 or len(es) < 2:
-        return _signal("none", "EMA non calculable")
-    d_now = ef[-1] - es[-1]
-    d_prev = ef[-2] - es[-2]
-    info = {"fast": round(ef[-1], 6), "slow": round(es[-1], 6),
-            "spread": round(d_now, 8), "prev_spread": round(d_prev, 8)}
-    if d_now > 0:
-        if d_prev <= 0:
-            return _signal("buy", f"EMA{fast} croise au-dessus de EMA{slow}", **info)
-        if allow_reentry:
-            return _signal("buy", f"tendance haussiere maintenue (EMA{fast} > EMA{slow}) — re-entree",
-                           **info)
-        return _signal("none", "tendance haussiere mais re-entree desactivee", **info)
-    if d_now < 0:
-        if d_prev >= 0:
-            return _signal("sell", f"EMA{fast} croise sous EMA{slow}", **info)
-        if allow_reentry:
-            return _signal("sell", f"tendance baissiere maintenue (EMA{fast} < EMA{slow}) — re-entree",
-                           **info)
-        return _signal("none", "tendance baissiere mais re-entree desactivee", **info)
-    return _signal("none", f"EMA{fast} et EMA{slow} confondues", **info)
+def user_strategies_dir() -> str:
+    """Dossier des strategies perso (%APPDATA%)."""
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "com.forex.terminal", "strategies")
 
 
-def rsi_reversion(closes: list[float], period: int = 14, oversold: float = 30.0,
-                  overbought: float = 70.0, allow_reentry: bool = True) -> dict:
-    """Retour a la moyenne : etat « survente » => buy, « surachat » => sell."""
-    if len(closes) < period + 3:
-        return _signal("none", f"historique insuffisant pour RSI{period}")
-    r = rsi(closes, period)
-    if len(r) < 2:
-        return _signal("none", "RSI non calculable")
-    now, prev = r[-1], r[-2]
-    info = {"rsi": round(now, 2), "prev_rsi": round(prev, 2),
-            "oversold": oversold, "overbought": overbought}
-    if now < oversold:
-        if prev >= oversold:
-            return _signal("buy", f"RSI entre en survente ({now:.1f})", **info)
-        if allow_reentry:
-            return _signal("buy", f"toujours en survente (RSI {now:.1f}) — re-entree", **info)
-        return _signal("none", "survente mais re-entree desactivee", **info)
-    if now > overbought:
-        if prev <= overbought:
-            return _signal("sell", f"RSI entre en surachat ({now:.1f})", **info)
-        if allow_reentry:
-            return _signal("sell", f"toujours en surachat (RSI {now:.1f}) — re-entree", **info)
-        return _signal("none", "surachat mais re-entree desactivee", **info)
-    return _signal("none", f"RSI neutre ({now:.1f})", **info)
+def _load_module(path: str, name: str):
+    try:
+        spec = importlib.util.spec_from_file_location(f"strategy_{name}", path)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        if not hasattr(mod, "evaluate") or not hasattr(mod, "NAME"):
+            log.warning("strategie %s ignoree (NAME/evaluate manquant)", name)
+            return None
+        return mod
+    except Exception as e:
+        log.warning("strategie %s illisible : %s", name, e)
+        return None
 
 
-def breakout(closes: list[float], highs: list[float], lows: list[float],
-             lookback: int = 20, allow_reentry: bool = True) -> dict:
-    """Cassure du plus haut (ou plus bas) des `lookback` barres precedentes.
-    Etat : le dernier close reste au-dessus du plus haut precedent => buy."""
-    n = lookback + 1
-    if len(closes) < n + 1:
-        return _signal("none", f"historique insuffisant pour breakout({lookback})")
-    last_c = closes[-1]
-    prev_hi = max(highs[-n - 1: -1])
-    prev_lo = min(lows[-n - 1: -1])
-    info = {"close": last_c, "prev_high": prev_hi, "prev_low": prev_lo, "lookback": lookback}
-    if last_c > prev_hi:
-        return _signal("buy", f"au-dessus du plus haut precedent ({prev_hi:.6f})", **info)
-    if last_c < prev_lo:
-        return _signal("sell", f"sous le plus bas precedent ({prev_lo:.6f})", **info)
-    return _signal("none", "pas de cassure", **info)
+def _scan() -> None:
+    """(re)charge le registre depuis les deux dossiers de strategies."""
+    _MODULES.clear()
+    for d in (_BUILTIN_DIR, user_strategies_dir()):
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".py") or fn.startswith("_"):
+                continue
+            name = fn[:-3]
+            mod = _load_module(os.path.join(d, fn), name)
+            if mod is None:
+                continue
+            mod.BUILTIN = (d == _BUILTIN_DIR)
+            _MODULES[mod.NAME] = mod
+    log.info("strategies chargees : %s", ", ".join(sorted(_MODULES)) or "aucune")
 
 
-# ── Dispatcher ──────────────────────────────────────────────────────────────
-def evaluate(strategy: dict, bars: list[dict]) -> dict:
-    """bars : liste de dicts {t,o,h,l,c,v} ORDREES du plus ancien au plus recent
-    (la barre EN COURS, incomplete, doit etre EXCLUE par l'appelant)."""
-    name = (strategy or {}).get("name", "ema_cross")
-    reentry = bool(strategy.get("allow_reentry", True))
-    closes = [b["c"] for b in bars if b.get("c") is not None]
-    if len(closes) < 3:
-        return _signal("none", "pas assez de barres")
+_scan()
 
-    if name == "ema_cross":
-        fast = int(strategy.get("fast", 9))
-        slow = int(strategy.get("slow", 21))
-        if fast <= 0 or slow <= 0 or fast >= slow:
-            return _signal("none", f"parametres EMA invalides (fast={fast}, slow={slow})")
-        return ema_cross(closes, fast, slow, allow_reentry=reentry)
 
-    if name == "rsi_reversion":
-        return rsi_reversion(
-            closes,
-            period=int(strategy.get("period", 14)),
-            oversold=float(strategy.get("oversold", 30.0)),
-            overbought=float(strategy.get("overbought", 70.0)),
-            allow_reentry=reentry,
-        )
+def reload() -> list[str]:
+    """Recharge le registre (apres avoir depose une nouvelle strategie)."""
+    _scan()
+    return sorted(_MODULES)
 
-    if name == "breakout":
-        highs = [b.get("h") for b in bars if b.get("h") is not None]
-        lows = [b.get("l") for b in bars if b.get("l") is not None]
-        if len(highs) != len(closes) or len(lows) != len(closes):
-            return _signal("none", "donnees OHLC incompletes")
-        return breakout(closes, highs, lows, lookback=int(strategy.get("lookback", 20)),
-                        allow_reentry=reentry)
 
-    return _signal("none", f"strategie inconnue : {name}")
+def available() -> list[dict]:
+    """Liste des strategies disponibles, avec le schema de leurs parametres."""
+    out = []
+    for name, mod in sorted(_MODULES.items()):
+        params = dict(getattr(mod, "PARAMS", {}) or {})
+        params["allow_reentry"] = {
+            "type": "bool", "default": True,
+            "label": "Re-entree (apres SL/TP)",
+        }
+        out.append({
+            "name": name,
+            "description": getattr(mod, "DESCRIPTION", ""),
+            "builtin": bool(getattr(mod, "BUILTIN", False)),
+            "params": params,
+        })
+    return out
+
+
+def get(name: str):
+    return _MODULES.get(name)
 
 
 def validate_strategy(strategy: dict) -> dict:
@@ -198,27 +144,59 @@ def validate_strategy(strategy: dict) -> dict:
     if not isinstance(strategy, dict):
         raise ValueError("strategy doit etre un objet")
     name = strategy.get("name")
-    if name not in STRATEGY_NAMES:
-        raise ValueError(f"strategy.name inconnu : {name!r} (autorise : {', '.join(STRATEGY_NAMES)})")
+    mod = get(name)
+    if mod is None:
+        raise ValueError(
+            f"strategy.name inconnu : {name!r} "
+            f"(disponibles : {', '.join(sorted(_MODULES)) or 'aucune'})"
+        )
     tf = strategy.get("timeframe")
     if tf not in TIMEFRAMES:
         raise ValueError(f"strategy.timeframe invalide : {tf!r} (autorise : {', '.join(TIMEFRAMES)})")
-    if name == "ema_cross":
-        fast, slow = strategy.get("fast"), strategy.get("slow")
-        for v, k in ((fast, "fast"), (slow, "slow")):
-            if not isinstance(v, int) or isinstance(v, bool) or v < 2 or v > 200:
-                raise ValueError(f"strategy.{k} invalide : {v!r} (entier 2..200)")
-        if fast >= slow:
-            raise ValueError(f"strategy.fast ({fast}) doit etre < strategy.slow ({slow})")
-    if name == "rsi_reversion":
-        p = strategy.get("period", 14)
-        if not isinstance(p, int) or isinstance(p, bool) or p < 2 or p > 50:
-            raise ValueError(f"strategy.period invalide : {p!r} (entier 2..50)")
-        os_, ob = float(strategy.get("oversold", 30.0)), float(strategy.get("overbought", 70.0))
-        if not (0 < os_ < ob < 100):
-            raise ValueError(f"strategy.oversold/overbought invalides : {os_}/{ob}")
-    if name == "breakout":
-        lb = strategy.get("lookback", 20)
-        if not isinstance(lb, int) or isinstance(lb, bool) or lb < 5 or lb > 200:
-            raise ValueError(f"strategy.lookback invalide : {lb!r} (entier 5..200)")
+
+    schema = dict(getattr(mod, "PARAMS", {}) or {})
+    for key, spec in schema.items():
+        if key not in strategy:
+            raise ValueError(f"strategy.{key} manquant")
+        v = strategy[key]
+        t = spec.get("type", "float")
+        if t == "int":
+            if not isinstance(v, int) or isinstance(v, bool):
+                raise ValueError(f"strategy.{key} doit etre un entier")
+        elif t == "float":
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                raise ValueError(f"strategy.{key} doit etre un nombre")
+        if "min" in spec and v < spec["min"]:
+            raise ValueError(f"strategy.{key} ({v}) < minimum {spec['min']}")
+        if "max" in spec and v > spec["max"]:
+            raise ValueError(f"strategy.{key} ({v}) > maximum {spec['max']}")
+    # coherence des seuils (RSI)
+    if "oversold" in schema and "overbought" in schema:
+        if not (0 < float(strategy["oversold"]) < float(strategy["overbought"]) < 100):
+            raise ValueError("strategy.oversold doit etre < strategy.overbought")
+    if "fast" in schema and "slow" in schema:
+        if int(strategy["fast"]) >= int(strategy["slow"]):
+            raise ValueError("strategy.fast doit etre < strategy.slow")
     return strategy
+
+
+def evaluate(strategy: dict, bars: list[dict]) -> dict:
+    """Evalue la config 'strategy' sur les barres CLOSES fournies."""
+    name = (strategy or {}).get("name")
+    mod = get(name)
+    if mod is None:
+        return {"action": "none", "reason": f"strategie inconnue : {name}"}
+    params = {k: v for k, v in (strategy or {}).items()
+              if k not in ("name", "timeframe", "allow_reentry")}
+    params["allow_reentry"] = bool((strategy or {}).get("allow_reentry", True))
+    try:
+        return mod.evaluate(bars, params)
+    except Exception as e:
+        log.exception("strategie %s : %s", name, e)
+        return {"action": "none", "reason": f"erreur de la strategie : {e}"}
+
+
+TIMEFRAMES = {
+    "M1": 1, "M5": 5, "M15": 15, "M30": 30,
+    "H1": 60, "H4": 240, "D1": 1440,
+}

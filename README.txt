@@ -144,6 +144,55 @@ Le signal est un **etat**, pas un evenement : le bot peut re-entrer apres un
 SL/TP (`allow_reentry`), tout en refusant d'empiler une position sur un
 symbole deja ouvert.
 
+### Ajouter TA strategie
+
+Les strategies sont des modules Python charges dynamiquement. Deux dossiers
+sont scannes au demarrage du bot :
+
+- `bot/strategies/` — les strategies fournies
+- `%APPDATA%\com.forex.terminal\strategies\` — **tes strategies** (cree le
+  dossier si besoin, il est indique dans le dashboard)
+
+Un module doit exposer :
+
+```python
+NAME = "ma_strategie"
+DESCRIPTION = "Ce que fait ma strategie"
+PARAMS = {
+    "mon_param": {"type": "int", "min": 1, "max": 100, "default": 10,
+                  "label": "Mon parametre"},
+}
+
+def evaluate(bars, params):
+    # bars : barres CLOSES, de la plus ancienne a la plus recente
+    #        [{t, o, h, l, c, v}, ...]
+    return {"action": "buy" | "sell" | "none", "reason": "..."}
+```
+
+Redemarre le bot : la strategie apparait automatiquement dans le selecteur du
+dashboard, avec ses parametres. Copie `bot/strategies/breakout.py` comme
+modele.
+
+## Connexion MT5
+
+Le dashboard a un panneau **Connexion MetaTrader 5** :
+- statut (connecte / non connecte), compte, derniere erreur, nb de tentatives
+- formulaire login / password / server + **Enregistrer & connecter**
+- bouton **Connecter MT5** pour forcer une reconnexion
+
+Les identifiants sont ecrits dans `shared/credentials.json` (jamais versionne
+par git : le modele versionne est `shared/credentials.example.json`).
+Utilise un compte **DEMO**.
+
+## L'agent et le marche
+
+Au clic sur « Analyse OpenCode », le bot recupere via les APIs publiques :
+quotes, taux, calendrier economique, actualites, et un resume des chandeliers
+(SMA20/SMA50, range, volatilite). Ces donnees sont **injectees dans le
+prompt** : l'agent voit toujours le marche, meme si le MCP `market-data` n'est
+pas installe. Le MCP reste disponible pour aller plus loin (il est installe
+par `setup.ps1`).
+
 ## Securite
 
 - L'IA n'a AUCUN acces a MetaTrader5 : elle ne fait que proposer un JSON.

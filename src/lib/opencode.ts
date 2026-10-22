@@ -1,4 +1,4 @@
-import { BOT, getRuntime, pushConfig, type Runtime } from "./bot";
+import { BOT, botBase, getRuntime, j, pushConfig, type Runtime } from "./bot";
 
 /** Port du serveur opencode. Il n'est PAS fixe : Tauri choisit un port libre
  *  (4096 peut etre occupe par un processus etranger) et le publie via le bot
@@ -107,22 +107,89 @@ export function extractJson(raw: string): string {
   return s.slice(start, end + 1);
 }
 
-/** Cycle complet : etat runtime -> analyse OpenCode -> push bot_config.set
- *  (valide en TOTAL par le bot). */
+/** Resume le marche pour l'agent : quotes, taux, calendrier, actus, candles.
+ *  Le bot les recupere via les APIs publiques : l'agent voit donc TOUJOURS
+ *  le marche, meme si le MCP market-data n'est pas installe. */
+async function marketBrief(symbols = "EURUSD,GBPUSD,USDJPY,XAUUSD") {
+  const base = await botBase();
+  const out: string[] = [];
+  try {
+    const s = await j<{
+      quotes: { symbol: string; price: number | null; change_pct: number | null }[];
+      fx_rates: { source?: string; pairs?: Record<string, number> };
+      calendar: { title: string; country: string; impact: string; forecast: string; previous: string; date: string }[];
+      news: { title: string; source: string }[];
+    }>(`${base}/market/snapshot?symbols=${encodeURIComponent(symbols)}`, undefined, 25000);
+
+    if (s.quotes?.length) {
+      out.push("QUOTES :");
+      for (const q of s.quotes) {
+        out.push(`  - ${q.symbol} = ${q.price ?? "?"} (${q.change_pct ?? "?"} %)`);
+      }
+    }
+    if (s.fx_rates?.pairs && Object.keys(s.fx_rates.pairs).length) {
+      out.push("TAUX : " + Object.entries(s.fx_rates.pairs)
+        .map(([k, v]) => `${k}=${v}`).join("  ") + ` (source ${s.fx_rates.source})`);
+    }
+    if (s.calendar?.length) {
+      out.push("CALENDRIER ECONOMIQUE :");
+      for (const e of s.calendar.slice(0, 12)) {
+        out.push(`  - [${e.impact}] ${e.title} (${e.country})`
+          + ` prev=${e.previous || "?"} forecast=${e.forecast || "?"}`);
+      }
+    }
+    if (s.news?.length) {
+      out.push("ACTUALITES :");
+      for (const n of s.news.slice(0, 10)) {
+        out.push(`  - ${n.title} (${n.source})`);
+      }
+    }
+  } catch (e) {
+    out.push(`(marche indisponible : ${String(e)})`);
+  }
+
+  // Chandeliers : l'agent peut calculer lui-meme la volatilite
+  try {
+    const c = await j<{ candles: { t: number; o: number; h: number; l: number; c: number }[] }>(
+      `${base}/market/candles?symbol=EURUSD&interval=5m&range=1d`, undefined, 20000);
+    const cd = c.candles ?? [];
+    if (cd.length) {
+      const closes = cd.map((x) => x.c);
+      const hi = Math.max(...cd.map((x) => x.h));
+      const lo = Math.min(...cd.map((x) => x.l));
+      const last = closes[closes.length - 1];
+      const sma = (n: number) => closes.slice(-n).reduce((a, b) => a + b, 0) / n;
+      const range = (hi - lo) / last * 100;
+      out.push("CANDLES EURUSD M5 (5m x " + cd.length + ") :");
+      out.push(`  - dernier close=${last}  plus-haut=${hi}  plus-bas=${lo}  range=${range.toFixed(3)}%`);
+      out.push(`  - SMA20=${sma(20).toFixed(6)}  SMA50=${sma(Math.min(50, closes.length)).toFixed(6)}`);
+      const r = Math.abs((sma(20) - sma(Math.min(50, closes.length))) / last) * 100;
+      out.push(`  - ecart SMA20/SMA50 = ${r.toFixed(3)}% (volatilite)`);
+    }
+  } catch (e) {
+    out.push(`(candeliers indisponibles : ${String(e)})`);
+  }
+  return out.join("\n");
+}
+
+/** Cycle complet : etat runtime + marche reel -> analyse OpenCode ->
+ *  push bot_config.set (valide en TOTAL par le bot). */
 export async function analyzeAndPropose(instruction: string) {
   const s = await createSession();
   if (!s.id) throw new Error("session opencode indisponible");
 
   const runtime: Runtime = await getRuntime();
+  const market = await marketBrief();
   const model = { providerID: MODEL.split("/")[0], modelID: MODEL.split("/").slice(1).join("/") };
 
   const raw = await prompt(
     s.id,
     `Etat runtime du bot : ${JSON.stringify(runtime)}\n\n` +
+      `DONNEES DE MARCHE REELLES (APIs publiques, recuperees a l'instant) :\n${market}\n\n` +
       `Tache : ${instruction}\n\n` +
-      `Utilise les outils MCP "market-data" (market_snapshot, market_quote, ` +
-      `ohlc_candles, economic_calendar, market_news) pour obtenir des donnees ` +
-      `de marche REELLES.\n` +
+      `Tu peux aussi appeler les outils MCP "market-data" (market_snapshot, ` +
+      `market_quote, ohlc_candles, economic_calendar, market_news) pour aller ` +
+      `plus loin sur le marche.\n` +
       `Reponds UNIQUEMENT par le contenu JSON complet de shared/bot_config.set, ` +
       `sans texte autour et sans blocs markdown.`,
     model,

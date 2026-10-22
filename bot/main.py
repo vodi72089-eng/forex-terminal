@@ -359,6 +359,119 @@ def opencode_port():
     return {"port": paths.read_oc_port()}
 
 
+# ── MT5 ────────────────────────────────────────────────────────────────────
+@app.get("/mt5/status")
+def mt5_status():
+    """Etat de la connexion MetaTrader 5 (utilise par le dashboard)."""
+    st = conn.status()
+    st["credentials_path"] = CREDS_PATH
+    st["credentials_hint"] = (
+        "Renseigne shared/credentials.json (login / password / server d'un "
+        "compte DEMO) puis clique sur Connecter."
+    )
+    return st
+
+
+@app.post("/mt5/connect")
+def mt5_connect(x_bot_token: str = Header(default="")):
+    """Force une reconnexion immediate au terminal MT5."""
+    _auth(x_bot_token)
+    conn.request_reconnect()
+    log_add("INFO", "reconnexion MT5 demandee", "mt5")
+    return {"ok": True, "status": conn.status()}
+
+
+class CredsIn(BaseModel):
+    login: int
+    password: str
+    server: str
+    bot_token: str | None = None
+
+
+@app.post("/mt5/credentials")
+def mt5_credentials(c: CredsIn, x_bot_token: str = Header(default="")):
+    """Enregistre les identifiants MT5 puis reconnecte.
+    Le token du bot peut aussi etre change ici (il doit correspondre a
+    celui utilise par le dashboard)."""
+    _auth(x_bot_token)
+    if not c.server.strip():
+        raise HTTPException(422, "server obligatoire")
+    creds = {
+        "login": int(c.login),
+        "password": c.password,
+        "server": c.server.strip(),
+        "bot_token": c.bot_token or CREDS["token"],
+    }
+    tmp = CREDS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8-sig") as f:
+        json.dump(creds, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, CREDS_PATH)
+    conn.update_credentials(creds["login"], creds["password"], creds["server"])
+    log_add("INFO", f"identifiants MT5 enregistres (login={creds['login']} server={creds['server']})", "mt5")
+    return {"ok": True, "status": conn.status()}
+
+
+# ── Strategies ─────────────────────────────────────────────────────────────
+@app.get("/strategies")
+def strategies():
+    """Strategies disponibles (incluses + celles deposes par l'utilisateur)
+    avec le schema de leurs parametres, et la strategie active."""
+    return {
+        "available": strategy_mod.available(),
+        "current": (cfg or {}).get("strategy"),
+        "user_dir": strategy_mod.user_strategies_dir(),
+        "timeframes": list(strategy_mod.TIMEFRAMES.keys()),
+    }
+
+
+class StrategyIn(BaseModel):
+    name: str
+    timeframe: str = "M5"
+    params: dict = {}
+
+
+@app.post("/strategy")
+def set_strategy(s: StrategyIn, x_bot_token: str = Header(default="")):
+    """Applique une strategie (et ses parametres) a la config courante.
+    Le FICHIER ENTIER est renvoye au bot comme pour toute autre config."""
+    _auth(x_bot_token)
+    if not cfg:
+        raise HTTPException(409, "aucune config chargee")
+    mod = strategy_mod.get(s.name)
+    if mod is None:
+        raise HTTPException(404, f"strategie inconnue : {s.name}")
+    schema = dict(getattr(mod, "PARAMS", {}) or {})
+    block = {"name": s.name, "timeframe": s.timeframe,
+             "allow_reentry": bool(s.params.get("allow_reentry", True))}
+    for key, spec in schema.items():
+        if key not in s.params:
+            block[key] = spec.get("default")
+            continue
+        v = s.params[key]
+        if spec.get("type") == "int":
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(422, f"parametre {key} : entier attendu")
+        elif spec.get("type") == "float":
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                raise HTTPException(422, f"parametre {key} : nombre attendu")
+        block[key] = v
+    new_cfg = dict(cfg)
+    new_cfg["strategy"] = block
+    new_cfg["version"] = int(new_cfg.get("version", 1)) + 1
+    new_cfg["issued_by"] = "dashboard"
+    new_cfg["issued_at"] = datetime.now().isoformat(timespec="seconds")
+    try:
+        c = apply_config(json.dumps(new_cfg))
+    except Exception as e:
+        raise HTTPException(422, f"config rejete : {e}")
+    log_add("INFO", f"strategie appliquee : {s.name} {block}", "strategy")
+    return {"applied": True, "strategy": c["strategy"], "version": c["version"]}
+
+
 @app.get("/market/snapshot")
 def market_snapshot(symbols: str | None = None, news_limit: int = 8):
     """Marche public (APIs gratuites sans cle) : quotes, taux, calendrier, actus."""

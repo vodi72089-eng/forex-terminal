@@ -76,7 +76,9 @@ def seed_shared_from_resources() -> list[str]:
     # config initiale (le fichier courant est un etat runtime, ecrase a chaque
     # changement de configuration : il n'est donc pas versionne)
     _copy("bot_config.set.default", "bot_config.set")
-    _copy("credentials.json", "credentials.json")
+    # modele d'identifiants (le fichier reel contient les identifiants MT5 :
+    # il n'est JAMAIS versionne)
+    _copy("credentials.example.json", "credentials.json")
     _copy("bot_runtime.json", "bot_runtime.json")
     return copied
 

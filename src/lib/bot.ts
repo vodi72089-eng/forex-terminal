@@ -88,7 +88,7 @@ export type Snapshot = {
 
 /** Timeout par requete. Sans cela, UN endpoint qui ne repond pas (serveur
  *  zombie, port occupe) fige la chaine de rafraichissement du dashboard. */
-async function j<T>(url: string, init?: RequestInit, timeoutMs = 8000): Promise<T> {
+export async function j<T>(url: string, init?: RequestInit, timeoutMs = 8000): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -195,4 +195,94 @@ export const sendOrder = async (body: {
     headers: { "Content-Type": "application/json", "X-Bot-Token": TOKEN },
     body: JSON.stringify(body),
   });
+};
+
+/* ── MT5 ─────────────────────────────────────────────────────────────── */
+
+export type Mt5Status = {
+  connected: boolean;
+  login: number;
+  server: string;
+  has_password: boolean;
+  attempts: number;
+  last_error: string | null;
+  account: { login: number; server: string; name: string; currency: string } | null;
+  mt5forge: boolean;
+  credentials_path: string;
+  credentials_hint: string;
+};
+
+export const getMt5Status = async () => {
+  const base = await botBase();
+  return j<Mt5Status>(`${base}/mt5/status`);
+};
+
+export const connectMt5 = async () => {
+  const base = await botBase();
+  const r = await fetch(`${base}/mt5/connect`, {
+    method: "POST",
+    headers: { "X-Bot-Token": TOKEN },
+  });
+  if (!r.ok) throw new Error(`connect MT5 -> ${r.status}`);
+  return r.json();
+};
+
+export const saveMt5Credentials = async (body: {
+  login: number; password: string; server: string; bot_token?: string;
+}) => {
+  const base = await botBase();
+  const r = await fetch(`${base}/mt5/credentials`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Bot-Token": TOKEN },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let d = `HTTP ${r.status}`;
+    try { d = (await r.json()).detail ?? d; } catch { /* non JSON */ }
+    throw new Error(d);
+  }
+  return r.json();
+};
+
+/* ── Strategies ──────────────────────────────────────────────────────── */
+
+export type StrategyParam = {
+  type: "int" | "float" | "bool";
+  min?: number; max?: number; default: number | boolean; label: string;
+};
+
+export type StrategyDef = {
+  name: string;
+  description: string;
+  builtin: boolean;
+  params: Record<string, StrategyParam>;
+};
+
+export type StrategiesPayload = {
+  available: StrategyDef[];
+  current: Record<string, unknown> | null;
+  user_dir: string;
+  timeframes: string[];
+};
+
+export const getStrategies = async () => {
+  const base = await botBase();
+  return j<StrategiesPayload>(`${base}/strategies`);
+};
+
+export const applyStrategy = async (body: {
+  name: string; timeframe: string; params: Record<string, unknown>;
+}) => {
+  const base = await botBase();
+  const r = await fetch(`${base}/strategy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Bot-Token": TOKEN },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let d = `HTTP ${r.status}`;
+    try { d = (await r.json()).detail ?? d; } catch { /* non JSON */ }
+    throw new Error(d);
+  }
+  return r.json();
 };
