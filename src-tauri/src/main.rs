@@ -38,7 +38,14 @@ fn find_in_path(name: &str, exts: &[&str], extra: &[&str]) -> Option<PathBuf> {
     }
     for d in dirs {
         for e in exts {
-            let cand = d.join(format!("{}{}", name, e));
+            // ATTENTION : l'extension est donnee SANS le point ("exe"),
+            // il faut le remettre ici -> "python.exe", pas "pythonexe".
+            let fname = if e.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}.{}", name, e)
+            };
+            let cand = d.join(fname);
             if cand.is_file() {
                 return Some(cand);
             }
