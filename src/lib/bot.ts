@@ -89,20 +89,30 @@ export const getNews = (q = "forex EURUSD", limit = 10) =>
 
 /** Pousse le FICHIER ENTIER de config. Le bot valide puis rejette en total. */
 export const pushConfig = async (raw: string) => {
-  const r = await fetch(`${BOT}/config/raw`, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain", "X-Bot-Token": TOKEN },
-    body: raw,
-  });
-  if (!r.ok) {
-    let detail = `HTTP ${r.status}`;
-    try {
-      const j = await r.json();
-      detail = j.detail ?? detail;
-    } catch { /* reponse non JSON */ }
-    throw new Error(detail);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(`${BOT}/config/raw`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", "X-Bot-Token": TOKEN },
+      body: raw,
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      let detail = `HTTP ${r.status}`;
+      try {
+        const j = await r.json();
+        detail = j.detail ?? detail;
+      } catch { /* reponse non JSON */ }
+      throw new Error(detail);
+    }
+    return await r.json();
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("push config : timeout (15s)");
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return r.json();
 };
 
 /** Active / desactive le bot en repoussant la config courante complete. */
@@ -115,9 +125,22 @@ export const setEnabled = async (enabled: boolean) => {
 };
 
 export const closeAll = async () => {
-  const r = await fetch(`${BOT}/close-all`, { method: "POST", headers: { "X-Bot-Token": TOKEN } });
-  if (!r.ok) throw new Error(`close-all -> ${r.status}`);
-  return r.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(`${BOT}/close-all`, {
+      method: "POST",
+      headers: { "X-Bot-Token": TOKEN },
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`close-all -> ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("close-all : timeout (15s)");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 export const sendOrder = (body: {
