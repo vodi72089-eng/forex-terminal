@@ -29,14 +29,22 @@ jobs:
 
       - name: Check the model referenced in opencode.json exists
         shell: pwsh
+        # Purement informatif : le runner n'a pas le CLI opencode, ce step
+        # ne doit JAMAIS faire echouer le build.
+        continue-on-error: true
         run: |
           $used = (Get-Content opencode.json -Raw | ConvertFrom-Json).model
+          if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
+            Write-Host "::notice::CLI opencode absent du runner - verification du modele ignoree (modele=$used)"
+            exit 0
+          }
           $models = opencode models 2>&1 | Out-String
           if ($models -match [regex]::Escape($used)) {
             Write-Host "OK model=$used"
           } else {
             Write-Host "::warning::modele '$used' introuvable dans opencode models"
           }
+          exit 0
 
       - name: Build frontend (export statique)
         run: npm run build
