@@ -7,3 +7,6 @@ src-tauri/gen/
 __pycache__/
 *.pyc
 .venv/
+
+# Fichiers generes par des outils tiers (MCP memory-bank / cline) — hors projet
+.clinerules-*

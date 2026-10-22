@@ -1,5 +1,8 @@
+# Dependances Python du bot + du serveur MCP market-data
+#   pip install -r bot/requirements.txt
 mt5forge
 MetaTrader5
 fastapi
 uvicorn[standard]
 pydantic
+mcp

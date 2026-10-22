@@ -27,6 +27,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Check the model referenced in opencode.json exists
+        shell: pwsh
+        run: |
+          $used = (Get-Content opencode.json -Raw | ConvertFrom-Json).model
+          $models = opencode models 2>&1 | Out-String
+          if ($models -match [regex]::Escape($used)) {
+            Write-Host "OK model=$used"
+          } else {
+            Write-Host "::warning::modele '$used' introuvable dans opencode models"
+          }
+
       - name: Build frontend (export statique)
         run: npm run build
 
@@ -51,7 +62,13 @@ jobs:
             EXE Windows auto-compile par GitHub Actions.
             - forex-terminal.exe : executable nu
             - forex-terminal_0.1.0_x64-setup.exe : installeur NSIS
-            L'EXE lance OpenCode (:4096) et le bot MT5 embarque (:8100) au demarrage.
+
+            L'EXE lance OpenCode (:4096) et le bot MT5 embarque (:8100).
+            PREREQUIS SUR LA MACHINE CIBLE : Python 3.10+ dans le PATH,
+            `pip install -r bot/requirements.txt`, MetaTrader 5 installe,
+            et `opencode` dans le PATH (npm i -g opencode-ai).
+
+            Donnees utilisateur : %APPDATA%\com.forex.terminal\
           files: |
             src-tauri/target/release/forex-terminal.exe
             src-tauri/target/release/bundle/nsis/*.exe

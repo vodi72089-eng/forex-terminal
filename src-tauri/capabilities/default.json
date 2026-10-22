@@ -10,6 +10,8 @@
         { "name": "opencode", "cmd": "opencode", "args": true, "sidecar": false },
         { "name": "python", "cmd": "python", "args": true, "sidecar": false }
       ]
-    }
+    },
+    "shell:allow-spawn",
+    "shell:allow-execute"
   ]
 }

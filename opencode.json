@@ -1,7 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/grok-code",
+  "model": "opencode/grok-4.7",
   "mcp": {
+    "market-data": {
+      "type": "local",
+      "command": ["python", "-u", "mcp/market_data.py"],
+      "enabled": true,
+      "environment": {}
+    },
     "wafle-scraper": {
       "type": "local",
       "command": ["wafle-scraper"],
@@ -11,7 +17,7 @@
   },
   "agent": {
     "market-analyst": {
-      "description": "Analyse le marche Forex et propose des parametres de bot en JSON strict. Ne trade jamais.",
+      "description": "Analyse le marche Forex via les APIs publiques (MCP market-data) et propose des parametres de bot en JSON strict. Ne trade jamais, n'ecrit aucun fichier.",
       "mode": "primary",
       "prompt": "{file:./AGENTS.md}",
       "tools": { "write": false, "edit": false, "bash": false }

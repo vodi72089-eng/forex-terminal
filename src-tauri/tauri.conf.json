@@ -30,6 +30,7 @@
     "resources": {
       "../bot/": "",
       "../shared/": "",
+      "../mcp/": "",
       "../.opencode/": "",
       "../opencode.json": "opencode.json",
       "../AGENTS.md": "AGENTS.md"
