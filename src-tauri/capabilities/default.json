@@ -1,17 +1,6 @@
 {
   "identifier": "default",
-  "description": "Permissions forex-terminal : spawn sidecars opencode + python",
+  "description": "Permissions forex-terminal. Les sidecars (opencode + bot python) sont demarres par le code RUST (src-tauri/src/main.rs) : la WebView n'a AUCUN acces au shell.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        { "name": "opencode", "cmd": "opencode", "args": true, "sidecar": false },
-        { "name": "python", "cmd": "python", "args": true, "sidecar": false }
-      ]
-    },
-    "shell:allow-spawn",
-    "shell:allow-execute"
-  ]
+  "permissions": ["core:default"]
 }
