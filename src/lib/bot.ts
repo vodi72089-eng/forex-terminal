@@ -38,6 +38,7 @@ export type Quote = {
 
 export type CalendarEvent = {
   title: string; country: string; date: string;
+  time?: string;
   impact: string; forecast: string; previous: string;
 };
 
@@ -51,10 +52,23 @@ export type Snapshot = {
   news: NewsItem[];
 };
 
-async function j<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
-  if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-  return r.json() as Promise<T>;
+/** Timeout par requete. Sans cela, UN endpoint qui ne repond pas (serveur
+ *  zombie, port occupe) fige la chaine de rafraichissement du dashboard. */
+async function j<T>(url: string, init?: RequestInit, timeoutMs = 8000): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...init, signal: init?.signal ?? ctrl.signal });
+    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+    return (await r.json()) as T;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") {
+      throw new Error(`${url} -> timeout (${timeoutMs}ms)`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const getRuntime = () => j<Runtime>(`${BOT}/runtime`);
@@ -63,7 +77,7 @@ export const getLogs = () => j<LogLine[]>(`${BOT}/logs`);
 export const getConfig = () => j<Record<string, unknown>>(`${BOT}/config`);
 
 export const getSnapshot = (symbols = "EURUSD,GBPUSD,USDJPY,XAUUSD") =>
-  j<Snapshot>(`${BOT}/market/snapshot?symbols=${encodeURIComponent(symbols)}`);
+  j<Snapshot>(`${BOT}/market/snapshot?symbols=${encodeURIComponent(symbols)}`, undefined, 25000);
 
 export const getQuote = (symbol: string) =>
   j<Quote>(`${BOT}/market/quote?symbol=${encodeURIComponent(symbol)}`);

@@ -10,6 +10,15 @@ import { analyzeAndPropose, ocHealth } from "@/lib/opencode";
 const fmt = (n: number | null | undefined, d = 2) =>
   n === null || n === undefined || Number.isNaN(n) ? "—" : n.toFixed(d);
 
+/** Le calendrier peut arriver en ISO ("2026-10-18T10:15:00-04:00") ou en
+ *  date + heure ("2026-10-18" + "2:15pm") selon la source. */
+const fmtEventDate = (e: { date?: string; time?: string }) => {
+  const d = e.date ?? "";
+  if (!d) return "";
+  if (d.includes("T")) return d.slice(5, 16).replace("T", " ");
+  return e.time ? `${d.slice(5)} ${e.time}` : d;
+};
+
 export default function Page() {
   const [rt, setRt] = useState<Runtime | null>(null);
   const [botOk, setBotOk] = useState(false);
@@ -27,16 +36,21 @@ export default function Page() {
     setLog((l) => [`${new Date().toLocaleTimeString()} — ${m}`, ...l].slice(0, 30));
 
   const refresh = useCallback(async () => {
-    try {
-      setBotOk((await health()).ok);
-    } catch { setBotOk(false); }
-    try {
-      setOcOk(Boolean((await ocHealth() as { healthy?: boolean }).healthy));
-    } catch { setOcOk(false); }
-    try {
-      setRt(await getRuntime());
+    // Les 3 appels sont INDEPENDANTS : un endpoint qui ne repond pas (serveur
+    // opencode plante, port occupe...) ne doit pas figer les autres.
+    const [h, o, r] = await Promise.allSettled([
+      health(),
+      ocHealth() as Promise<{ healthy?: boolean }>,
+      getRuntime(),
+    ]);
+    setBotOk(h.status === "fulfilled" && Boolean(h.value?.ok));
+    setOcOk(o.status === "fulfilled" && Boolean(o.value?.healthy));
+    if (r.status === "fulfilled") {
+      setRt(r.value);
       setErr(null);
-    } catch (e) { setErr(String(e)); }
+    } else {
+      setErr(String(r.reason));
+    }
   }, []);
 
   const refreshMarket = useCallback(async () => {
@@ -201,7 +215,7 @@ export default function Page() {
                 <span className={`impact ${(e.impact || "").toLowerCase()}`}>{e.impact || "-"}</span>
                 <span className="grow">{e.title}</span>
                 <span className="muted">{e.country}</span>
-                <span className="muted">{e.date ? e.date.slice(5, 16).replace("T", " ") : ""}</span>
+                <span className="muted">{e.date ? fmtEventDate(e) : ""}</span>
               </div>
             ))}
           </div>

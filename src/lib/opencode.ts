@@ -6,7 +6,10 @@ const OC = "http://127.0.0.1:4096";
  *  Surchargeable : NEXT_PUBLIC_OPENCODE_MODEL=opencode/grok-4.7 */
 export const MODEL = process.env.NEXT_PUBLIC_OPENCODE_MODEL || "opencode/grok-4.7";
 
-export const ocHealth = () => fetch(`${OC}/global/health`).then((r) => r.json());
+export const ocHealth = () =>
+  fetch(`${OC}/global/health`, { signal: AbortSignal.timeout(3000) })
+    .then((r) => r.json())
+    .catch((e) => ({ healthy: false, error: String(e) }));
 
 export async function createSession(title = "market-analysis") {
   const r = await fetch(`${OC}/session`, {

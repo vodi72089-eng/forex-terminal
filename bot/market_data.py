@@ -45,6 +45,16 @@ YAHOO_MAP = {
 }
 
 
+def _get_bytes(url: str, headers: dict | None = None) -> bytes:
+    """GET HTTP en binaire (certains flux XML declarent windows-1252)."""
+    h = {"User-Agent": UA, "Accept": "*/*"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, headers=h)
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return r.read()
+
+
 def _get(url: str, headers: dict | None = None) -> str:
     """GET HTTP avec User-Agent (Yahoo/Google exigent un UA navigateur)."""
     h = {"User-Agent": UA, "Accept": "*/*"}
@@ -53,6 +63,34 @@ def _get(url: str, headers: dict | None = None) -> str:
     req = urllib.request.Request(url, headers=h)
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         return r.read().decode("utf-8", errors="replace")
+
+
+# ── Cache TTL (certaines APIs publiques rate-limitent fortement) ───────────
+_CACHE: dict[str, tuple[float, object]] = {}
+_CACHE_TTL = {"calendar": 600.0, "news": 180.0, "rates": 300.0}
+
+
+def _cached(key: str, producer):
+    """Retourne la valeur en cache si encore fraiche, sinon la regenere.
+    En cas d'echec du producer, la valeur en cache (meme perimee) est
+    prefernee a une panne : le dashboard ne doit pas se vider."""
+    import time as _t
+    ttl = _CACHE_TTL.get(key)
+    if ttl is None:
+        ttl = 180.0 if key.startswith("news:") else 300.0
+    hit = _CACHE.get(key)
+    if hit and (_t.time() - hit[0]) < ttl:
+        return hit[1]
+    try:
+        val = producer()
+    except Exception as e:
+        log.warning("%s indisponible : %s", key, e)
+        if hit is not None:
+            log.info("%s : retour au cache perime", key)
+            return hit[1]
+        return None
+    _CACHE[key] = (_t.time(), val)
+    return val
 
 
 def _get_json(url: str) -> dict | list:
@@ -193,26 +231,63 @@ def quote(symbol: str) -> dict:
 
 
 # ── 3. Calendrier economique ───────────────────────────────────────────────
-def economic_calendar(impact: str | None = None) -> list:
-    """Calendrier economique ForexFactory (semaine en cours)."""
-    try:
-        raw = _get_json("https://nfs.faireconomy.media/ff_calendar_thisweek.json")
-    except Exception as e:
-        log.warning("economic_calendar : %s", e)
-        return []
+def _calendar_from_xml() -> list:
+    """Calendrier ForexFactory via le flux XML.
+    L'endpoint JSON (/ff_calendar_thisweek.json) renvoie tres souvent 429,
+    le XML lui n'est pas rate-limite : c'est le repli principal."""
+    root = ET.fromstring(_get_bytes("https://nfs.faireconomy.media/ff_calendar_thisweek.xml"))
     items = []
-    for ev in raw if isinstance(raw, list) else []:
+    for ev in root.findall("event"):
+        def _t(tag: str) -> str:
+            el = ev.find(tag)
+            return (el.text or "").strip() if el is not None else ""
+        raw_date = _t("date")
+        # le XML donne MM-DD-YYYY, le JSON donne de l'ISO : on normalise en ISO
+        iso_date = raw_date
+        m = re.match(r"^(\d{2})-(\d{2})-(\d{4})$", raw_date)
+        if m:
+            iso_date = f"{m.group(3)}-{m.group(1)}-{m.group(2)}"
+        items.append({
+            "title": _t("title"),
+            "country": _t("country"),
+            "date": iso_date,
+            "time": _t("time"),
+            "impact": _t("impact"),
+            "forecast": _t("forecast"),
+            "previous": _t("previous"),
+            "url": _t("url"),
+        })
+    return items
+
+
+def economic_calendar(impact: str | None = None) -> list:
+    """Calendrier economique ForexFactory (semaine en cours).
+    Cache 10 min. Source : JSON si disponible, sinon XML (pas de 429)."""
+    def _fetch() -> list:
         try:
-            items.append({
-                "title": ev.get("title"),
-                "country": ev.get("country"),
-                "date": ev.get("date"),
-                "impact": ev.get("impact"),
-                "forecast": ev.get("forecast"),
-                "previous": ev.get("previous"),
-            })
-        except Exception:
-            continue
+            raw = _get_json("https://nfs.faireconomy.media/ff_calendar_thisweek.json")
+            items = []
+            for ev in raw if isinstance(raw, list) else []:
+                try:
+                    items.append({
+                        "title": ev.get("title"),
+                        "country": ev.get("country"),
+                        "date": ev.get("date"),
+                        "time": "",
+                        "impact": ev.get("impact"),
+                        "forecast": ev.get("forecast"),
+                        "previous": ev.get("previous"),
+                        "url": ev.get("url", ""),
+                    })
+                except Exception:
+                    continue
+            if items:
+                return items
+        except Exception as e:
+            log.warning("calendrier JSON indisponible (%s) -> repli XML", e)
+        return _calendar_from_xml()
+
+    items = _cached("calendar", _fetch) or []
     if impact:
         items = [i for i in items if (i.get("impact") or "").lower() == impact.lower()]
     return items
@@ -249,43 +324,75 @@ def _rss_items(xml_text: str, limit: int) -> list:
 
 
 def news(query: str = "forex EURUSD", limit: int = 15, lang: str = "en-US") -> list:
-    """Actualites via Google News RSS (gratuit, sans cle)."""
-    q = urllib.parse.quote(query)
-    if lang.startswith("fr"):
-        url = f"https://news.google.com/rss/search?q={q}&hl=fr&gl=FR&ceid=FR:fr"
-    else:
-        url = f"https://news.google.com/rss/search?q={q}&hl={lang}&gl=US&ceid=US:en"
-    try:
-        return _rss_items(_get(url), limit)
-    except Exception as e:
-        log.warning("news : %s", e)
-        return []
+    """Actualites via Google News RSS, repli FXStreet RSS (specialiste Forex).
+    Cache 3 min."""
+    def _fetch() -> list:
+        q = urllib.parse.quote(query)
+        if lang.startswith("fr"):
+            url = f"https://news.google.com/rss/search?q={q}&hl=fr&gl=FR&ceid=FR:fr"
+        else:
+            url = f"https://news.google.com/rss/search?q={q}&hl={lang}&gl=US&ceid=US:en"
+        try:
+            items = _rss_items(_get(url), limit)
+            if items:
+                return items
+        except Exception as e:
+            log.warning("news Google indisponible : %s", e)
+        # Repli : flux Forex/technique (FXStreet)
+        try:
+            return _rss_items(_get("https://www.fxstreet.com/rss/news"), limit)
+        except Exception as e:
+            log.warning("news FXStreet indisponible : %s", e)
+            return []
+
+    key = f"news:{query[:60]}"
+    return _cached(key, _fetch) or []
 
 
 # ── 5. Snapshot combine (dashboard) ────────────────────────────────────────
 def market_snapshot(symbols: list[str] | None = None, news_limit: int = 8,
                     calendar_limit: int = 10) -> dict:
     """Vue d'ensemble de marche : quotes + calendrier + actus. Tous les appels
-    sont tolérants aux pannes : un source KO ne doit pas casser le snapshot."""
+    sont tolerants aux pannes : un source KO ne doit pas casser le snapshot.
+    Les appels sont PARALLELES (le dashboard ne doit pas attendre 15 s)."""
+    from concurrent.futures import ThreadPoolExecutor
+
     syms = symbols or ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
-    quotes = []
-    for s in syms:
+
+    def _q(s):
         try:
-            quotes.append(quote(s))
+            return quote(s)
         except Exception as e:
-            quotes.append({"symbol": s, "error": str(e), "price": None})
-    try:
-        rates = fx_rates()
-    except Exception as e:
-        rates = {"error": str(e), "pairs": {}}
-    try:
-        cal = economic_calendar()
-    except Exception as e:
-        cal = []
-    try:
-        nw = news("forex OR EURUSD OR Federal Reserve", limit=news_limit)
-    except Exception as e:
-        nw = []
+            return {"symbol": s, "error": str(e), "price": None}
+
+    def _rates():
+        try:
+            return fx_rates()
+        except Exception as e:
+            return {"error": str(e), "pairs": {}}
+
+    def _cal():
+        try:
+            return economic_calendar()
+        except Exception:
+            return []
+
+    def _news():
+        try:
+            return news("forex OR EURUSD OR Federal Reserve", limit=news_limit)
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_q = [ex.submit(_q, s) for s in syms]
+        f_r = ex.submit(_rates)
+        f_c = ex.submit(_cal)
+        f_n = ex.submit(_news)
+        quotes = [f.result() for f in f_q]
+        rates = f_r.result()
+        cal = f_c.result()
+        nw = f_n.result()
+
     return {
         "ts": int(datetime.now(timezone.utc).timestamp()),
         "quotes": quotes,
