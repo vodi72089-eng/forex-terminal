@@ -1,5 +1,5 @@
-"""
-Forex Terminal — bot MT5 embarque (module Python du projet Tauri/Next.js).
+﻿"""
+Forex Terminal â€” bot MT5 embarque (module Python du projet Tauri/Next.js).
 
 Lance par Tauri au demarrage de l'app :
     python -u bot/main.py
@@ -43,7 +43,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("bot.main")
 
-# ── Chemins ────────────────────────────────────────────────────────────────
+# â”€â”€ Chemins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SHARED = paths.ensure_shared()
 paths.seed_shared_from_resources()
 CFG_PATH = paths.path_in_shared("bot_config.set")
@@ -53,15 +53,15 @@ LOG_PATH = paths.path_in_shared("bot.log")
 
 log.info("shared dir = %s", SHARED)
 
-# ── Identifiants ───────────────────────────────────────────────────────────
+# â”€â”€ Identifiants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _load_creds() -> dict:
     """Identifiants : variables d'env prioritaire, sinon shared/credentials.json."""
     creds = {}
     try:
-        with open(CREDS_PATH, "r", encoding="utf-8") as f:
+        with open(CREDS_PATH, "r", encoding="utf-8-sig") as f:
             creds = json.load(f)
     except Exception as e:
-        log.warning("credentials.json illisible (%s) — variables d'env attendues", e)
+        log.warning("credentials.json illisible (%s) â€” variables d'env attendues", e)
     try:
         login = int(os.environ.get("MT5_LOGIN") or creds.get("login") or 0)
     except (TypeError, ValueError):
@@ -87,11 +87,11 @@ COOLDOWN_S = 60.0
 
 app = FastAPI(title="forex-terminal-bot", docs_url=None, redoc_url=None)
 
-# ── CORS : le dashboard vit dans un WebView Tauri (origine tauri.localhost)
+# â”€â”€ CORS : le dashboard vit dans un WebView Tauri (origine tauri.localhost)
 # Sans ces headers, le navigateur BLOQUE la reponse et le dashboard reste
 # vide. Le bot n'ecoute QUE sur 127.0.0.1 : n'importe quel process local
 # peut deja l'atteindre sans navigateur, donc CORS n'est pas une barriere de
-# securite ici — les endpoints mutateurs sont proteges par le token.
+# securite ici â€” les endpoints mutateurs sont proteges par le token.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -133,7 +133,7 @@ def _persist(cfg: dict) -> None:
 
 def apply_config(raw: str, persist: bool = True):
     """Le fichier ENTIER est valide puis applique. Tout defaut => rejet total.
-    Renvoie la config effective. Lève une exception en cas de rejet."""
+    Renvoie la config effective. LÃ¨ve une exception en cas de rejet."""
     global cfg, cfg_error
     data = validate_full(raw)
     new_cfg = apply_policy(data, cfg)
@@ -152,7 +152,7 @@ def apply_config(raw: str, persist: bool = True):
     return cfg
 
 
-# ── Moteur de strategies ───────────────────────────────────────────────────
+# â”€â”€ Moteur de strategies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _tf_constant(tf: str):
     import MetaTrader5 as mt5
     return {
@@ -198,7 +198,7 @@ def run_strategies():
                 log_add("DEBUG", f"{symbol} {tf} : {sig['reason']}", "strategy")
                 continue
 
-            log_add("INFO", f"{symbol} {tf} : SIGNAL {sig['action'].upper()} — {sig['reason']}", "strategy")
+            log_add("INFO", f"{symbol} {tf} : SIGNAL {sig['action'].upper()} â€” {sig['reason']}", "strategy")
             res = trader.market_order(
                 symbol, sig["action"],
                 float(risk["max_lot"]), float(risk["sl_pips"]), float(risk["tp_pips"]),
@@ -309,7 +309,7 @@ def write_runtime():
     })
 
 
-# ── API ────────────────────────────────────────────────────────────────────
+# â”€â”€ API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class OrderIn(BaseModel):
     symbol: str
     side: str
@@ -326,7 +326,7 @@ def health():
 @app.get("/runtime")
 def runtime():
     try:
-        with open(RT_PATH, "r", encoding="utf-8") as f:
+        with open(RT_PATH, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except Exception:
         return {"ts": 0, "connected": False}
@@ -400,7 +400,7 @@ def order(o: OrderIn, x_bot_token: str = Header(default="")):
 def config_raw(raw: str = Body(..., media_type="text/plain"),
                x_bot_token: str = Header(default="")):
     """Pont OpenCode : l'agent pousse le FICHIER ENTIER ici.
-    Validation complete avant application — rejet total si un seul defaut.
+    Validation complete avant application â€” rejet total si un seul defaut.
 
     NOTE technique : sans Body(...), FastAPI interprete `raw: str` comme un
     QUERY PARAM et l'endpoint repondait toujours 422."""
@@ -419,7 +419,7 @@ def config_raw(raw: str = Body(..., media_type="text/plain"),
 
 @app.post("/close-all")
 def close_all(x_bot_token: str = Header(default="")):
-    """Bouton d'urgence humain — jamais accessible a l'IA."""
+    """Bouton d'urgence humain â€” jamais accessible a l'IA."""
     _auth(x_bot_token)
     n = trader.close_all()
     log_add("WARN", f"CLOSE ALL execute par l'utilisateur : {n} position(s) fermee(s)", "order")

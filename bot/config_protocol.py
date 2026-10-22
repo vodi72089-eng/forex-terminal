@@ -1,5 +1,5 @@
-"""
-Forex Terminal — protocole de configuration.
+﻿"""
+Forex Terminal â€” protocole de configuration.
 
 PRINCIPE : le fichier est valide ENTIEREMENT ou REJETE EN TOTAL.
 Jamais de mise a jour champ par champ (le bot rejette tout fichier partiel).
@@ -30,7 +30,7 @@ TOP_FIELDS = {
 }
 RISK_FIELDS = ("max_lot", "max_open_trades", "max_daily_loss_pct", "sl_pips", "tp_pips")
 
-# ── Garde-fous ABSOLUS : (min, max). Inclus dans le clamp, non negociables. ──
+# â”€â”€ Garde-fous ABSOLUS : (min, max). Inclus dans le clamp, non negociables. â”€â”€
 HARD_LIMITS = {
     "max_lot": (0.01, 0.10),
     "max_open_trades": (1, 3),
@@ -149,7 +149,7 @@ def load_if_changed(path: str, last_mtime: float):
         return None, last_mtime
     with LOCK:
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8-sig") as f:
                 raw = f.read()
         except OSError:
             return None, last_mtime

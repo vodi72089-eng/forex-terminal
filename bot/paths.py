@@ -49,26 +49,35 @@ def path_in_shared(name: str) -> str:
 
 
 def seed_shared_from_resources() -> list[str]:
-    """Au 1er lancement installe, copie les fichiers de seed depuis le dossier
-    de ressources (read-only) vers le dossier utilisateur inscriptible.
-    Retourne la liste des fichiers copies."""
+    """Au 1er lancement, initialise le dossier de donnees utilisateur depuis
+    les fichiers de seed du dossier de ressources (read-only).
+
+    - bot_config.set.default  -> bot_config.set  (config initiale)
+    - credentials.json        (modele a remplir)
+
+    Retourne la liste des fichiers crees."""
     import shutil
 
     root = project_root()
     src_shared = os.path.join(root, "shared")
     dst_shared = shared_dir()
-    if os.path.abspath(src_shared) == os.path.abspath(dst_shared):
-        return []
     if not os.path.isdir(src_shared):
         return []
-    copied = []
     os.makedirs(dst_shared, exist_ok=True)
-    for name in ("bot_config.set", "credentials.json", "bot_runtime.json"):
-        s = os.path.join(src_shared, name)
-        d = os.path.join(dst_shared, name)
+    copied = []
+
+    def _copy(src_name: str, dst_name: str) -> None:
+        s = os.path.join(src_shared, src_name)
+        d = os.path.join(dst_shared, dst_name)
         if os.path.isfile(s) and not os.path.isfile(d):
             shutil.copy2(s, d)
-            copied.append(name)
+            copied.append(dst_name)
+
+    # config initiale (le fichier courant est un etat runtime, ecrase a chaque
+    # changement de configuration : il n'est donc pas versionne)
+    _copy("bot_config.set.default", "bot_config.set")
+    _copy("credentials.json", "credentials.json")
+    _copy("bot_runtime.json", "bot_runtime.json")
     return copied
 
 

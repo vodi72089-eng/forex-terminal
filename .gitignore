@@ -8,8 +8,13 @@ __pycache__/
 *.pyc
 .venv/
 
-# Fichiers generes par des outils tiers (MCP memory-bank / cline) — hors projet
+# Fichiers generes par des outils tiers (MCP memory-bank / cline) - hors projet
 .clinerules-*
 
 # Fichiers de port ecrits a l'execution (choisis dynamiquement)
 shared/*.port
+
+# Etats runtime : ecrases a chaque changement de config, donc non versionnes
+# (le seed est shared/bot_config.set.default)
+shared/bot_config.set
+shared/bot_runtime.json
