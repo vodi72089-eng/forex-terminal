@@ -28,12 +28,14 @@
     "targets": ["nsis"],
     "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png"],
     "resources": {
-      "../bot/": "",
-      "../shared/": "",
-      "../mcp/": "",
-      "../.opencode/": "",
+      "../bot/": "bot",
+      "../mcp/": "mcp",
+      "../.opencode/": ".opencode",
       "../opencode.json": "opencode.json",
-      "../AGENTS.md": "AGENTS.md"
+      "../AGENTS.md": "AGENTS.md",
+      "../DEVAGENTS.md": "DEVAGENTS.md",
+      "../shared/bot_config.set.default": "shared/bot_config.set.default",
+      "../shared/credentials.example.json": "shared/credentials.example.json"
     }
   }
 }

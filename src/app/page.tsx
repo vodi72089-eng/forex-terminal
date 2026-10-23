@@ -9,6 +9,7 @@ import {
   type Runtime, type StrategyDef, type StrategiesPayload,
 } from "@/lib/bot";
 import { analyzeAndPropose, ocHealth, opencodePortLabel } from "@/lib/opencode";
+import Chat from "./chat";
 
 const fmt = (n: number | null | undefined, d = 2) =>
   n === null || n === undefined || Number.isNaN(n) ? "—" : n.toFixed(d);
@@ -282,6 +283,8 @@ export default function Page() {
           <div className="value">{fmt(rt?.limits?.max_lot, 3)}</div>
           <div className="sub">Perte max/jour {fmt(rt?.limits?.max_daily_loss_pct, 1)} %</div></div>
       </div>
+
+      <Chat onApplied={refresh} onStrategiesChanged={refresh} />
 
       <section>
         <h2>Actions</h2>

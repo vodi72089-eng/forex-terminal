@@ -420,7 +420,41 @@ def strategies():
         "available": strategy_mod.available(),
         "current": (cfg or {}).get("strategy"),
         "user_dir": strategy_mod.user_strategies_dir(),
+        "builtin_dir": strategy_mod.BUILTIN_DIR,
         "timeframes": list(strategy_mod.TIMEFRAMES.keys()),
+    }
+
+
+@app.post("/strategies/reload")
+def strategies_reload(x_bot_token: str = Header(default="")):
+    """Recharge le registre des strategies ( apres qu'un fichier .py a ete
+    depose ). Le bot n'a pas besoin d'etre redemarre."""
+    _auth(x_bot_token)
+    names = strategy_mod.reload()
+    log_add("INFO", f"strategies rechargees : {', '.join(names)}", "strategy")
+    return {"ok": True, "available": [d["name"] for d in strategy_mod.available()]}
+
+
+@app.get("/app/info")
+def app_info():
+    """Infos sur l'emplacement de l'app : sert au chat pour savoir si
+    l'agent peut modifier les fichiers (dossier inscriptible ou non)."""
+    root = paths.project_root()
+    writable = False
+    try:
+        probe = os.path.join(root, ".write_probe")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(probe)
+        writable = True
+    except Exception:
+        writable = False
+    return {
+        "root": root,
+        "writable": writable,
+        "shared_dir": SHARED,
+        "user_strategies_dir": strategy_mod.user_strategies_dir(),
+        "bot_version": "0.1.0",
     }
 
 

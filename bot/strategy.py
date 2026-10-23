@@ -64,6 +64,7 @@ def rsi(values: list[float], period: int = 14) -> list[float]:
 
 # ── Registre ───────────────────────────────────────────────────────────────
 _BUILTIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategies")
+BUILTIN_DIR = _BUILTIN_DIR  # alias public (utilise par le dashboard / l'API)
 _MODULES: dict[str, object] = {}
 
 

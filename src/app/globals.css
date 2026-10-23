@@ -65,7 +65,29 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .inp:focus { outline: none; border-color: var(--accent); }
 .inp.short { min-width: 92px; width: 92px; }
+.inp.grow { flex: 1; min-width: 260px; }
 select.inp { cursor: pointer; }
+
+/* ── Chat ─────────────────────────────────────────────────────────────── */
+.chat { display: flex; flex-direction: column; gap: 10px; }
+.msgs {
+  max-height: 460px; overflow-y: auto; display: flex; flex-direction: column;
+  gap: 10px; padding: 4px 2px;
+}
+.msg { border-left: 3px solid var(--line); padding: 8px 12px; border-radius: 0 10px 10px 0; }
+.msg.user { border-left-color: var(--accent); background: rgba(45, 212, 167, 0.05); }
+.msg.assistant { border-left-color: var(--accent); background: rgba(22, 30, 43, 0.6); }
+.msg .who { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.msg .txt { font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+.msg .tools { margin-top: 8px; font-size: 11px; }
+.msg .tools summary { cursor: pointer; color: var(--muted); }
+.msg .tool { margin: 6px 0 0 12px; font-size: 11px; }
+.msg .tool pre {
+  white-space: pre-wrap; word-break: break-word; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; margin: 4px 0 0; max-height: 140px; overflow: auto;
+}
+.msg button.apply { margin-top: 10px; background: var(--accent); color: #04110c; }
 .err { color: var(--danger); font-size: 13px; margin-top: 8px; }
 .warnbox {
   background: rgba(251, 191, 36, 0.08); border: 1px solid var(--warn);

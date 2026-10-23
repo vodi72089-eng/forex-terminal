@@ -17,15 +17,25 @@
   },
   "agent": {
     "market-analyst": {
-      "description": "Analyse le marche Forex via les APIs publiques (MCP market-data) et propose des parametres de bot en JSON strict. Ne trade jamais, n'ecrit aucun fichier.",
+      "description": "Analyste de marche : analyse le marche Forex via les APIs publiques et propose la configuration du bot en JSON strict. Ne trade jamais et n'ecrit aucun fichier.",
       "mode": "primary",
       "prompt": "{file:./AGENTS.md}",
-      "tools": { "write": false, "edit": false, "bash": false }
+      "tools": { "write": false, "edit": false, "bash": false },
+      "permission": {
+        "edit": { "**": "deny" },
+        "write": { "**": "deny" },
+        "bash": { "**": "deny" }
+      }
+    },
+    "dev-agent": {
+      "description": "Developpeur : modifie le code de l'application, cree et corrige des strategies, lance les tests. A le droit d'ecrire des fichiers et d'executer des commandes.",
+      "mode": "primary",
+      "prompt": "{file:./DEVAGENTS.md}",
+      "permission": {
+        "edit": { "**": "allow" },
+        "write": { "**": "allow" },
+        "bash": { "*": "allow" }
+      }
     }
-  },
-  "permission": {
-    "edit": { "**": "deny" },
-    "bash": { "**": "deny" },
-    "skill": { "*": "allow" }
   }
 }

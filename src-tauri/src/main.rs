@@ -165,16 +165,51 @@ fn write_port_file(name: &str, port: u16) {
     let _ = std::fs::write(p.join(name), port.to_string());
 }
 
+/// Repertoire de travail des sidecars : celui qui contient bot/ (et donc
+/// main.py), opencode.json, AGENTS.md, mcp/.
+///
+/// L'installeur NSIS peut deplacer les ressources : on teste donc plusieurs
+/// emplacements (dossier de ressources, dossier de l'exe, repertoire courant)
+/// au lieu de supposer un seul layout.
+fn find_runtime_dir() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(res) = std::env::current_exe() {
+        if let Some(dir) = res.parent() {
+            candidates.push(dir.to_path_buf());
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd);
+    }
+    for base in &candidates {
+        // layout 1 : <base>/bot/main.py
+        if base.join("bot").join("main.py").is_file() {
+            return Some(base.clone());
+        }
+        // layout 2 : resources aplatis -> <base>/main.py
+        if base.join("main.py").is_file() {
+            return Some(base.clone());
+        }
+        // layout 3 : <base>/resources/bot/main.py
+        let res = base.join("resources");
+        if res.join("bot").join("main.py").is_file() {
+            return Some(res);
+        }
+        if res.join("main.py").is_file() {
+            return Some(res);
+        }
+    }
+    None
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
             // Repertoire runtime : bot/, shared/, opencode.json, AGENTS.md, mcp/
-            let res = app.path().resource_dir()?;
-            let cwd = if res.join("bot").join("main.py").exists() {
-                res
-            } else {
-                std::env::current_dir()?
-            };
+            let cwd = find_runtime_dir()
+                .or_else(|| app.path().resource_dir().ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
 
             // 1. Sidecar OpenCode en mode serveur (port choisi dynamiquement)
             let oc_port = pick_port(4096, &[4097, 4098, 4099, 4100, 4180, 5280]);
